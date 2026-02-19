@@ -1,6 +1,6 @@
 'use client'
 
-import { MoreVertical, LogOut, User } from 'lucide-react'
+import { MoreVertical, LogOut, User, ListTodo } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,11 +14,13 @@ interface AppHeaderProps {
   title: string
   userName?: string
   onLogout?: () => void
+  onOpenProfile?: () => void
+  onOpenTasks?: () => void
 }
 
-export function AppHeader({ title, userName, onLogout }: AppHeaderProps) {
+export function AppHeader({ title, userName, onLogout, onOpenProfile, onOpenTasks }: AppHeaderProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-card border-b border-border">
+    <header className="safe-top safe-x sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-card border-b border-border">
       <h1 className="text-xl font-semibold text-foreground">{title}</h1>
 
       <DropdownMenu>
@@ -42,6 +44,19 @@ export function AppHeader({ title, userName, onLogout }: AppHeaderProps) {
               <DropdownMenuSeparator />
             </>
           )}
+          {onOpenProfile && (
+            <DropdownMenuItem onClick={onOpenProfile} className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              <span>Profile</span>
+            </DropdownMenuItem>
+          )}
+          {onOpenTasks && (
+            <DropdownMenuItem onClick={onOpenTasks} className="flex items-center gap-2">
+              <ListTodo className="h-4 w-4" />
+              <span>Tasks</span>
+            </DropdownMenuItem>
+          )}
+          {(onOpenProfile || onOpenTasks) && onLogout && <DropdownMenuSeparator />}
           {onLogout && (
             <DropdownMenuItem
               onClick={onLogout}

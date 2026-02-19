@@ -231,20 +231,53 @@ export class SupabaseAgentAdapter implements ChatProvider {
     title: string
     lastMessageAt: Date
     updatedAt: Date
+    agentUserId: string
+    agentDisplayName?: string
+    agentType?: 'human' | 'llm' | 'computer'
   }>> {
     const { data, error } = await this.supabase
       .from('conversations')
-      .select('id, title, last_message_at, updated_at')
+      .select('id, title, last_message_at, updated_at, agent_user_id')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false })
 
     if (error) throw error
 
-    return (data || []).map((conv: any) => ({
+    const conversationRows = data || []
+    const agentIds = Array.from(
+      new Set(
+        conversationRows
+          .map((conv: any) => conv.agent_user_id)
+          .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
+      )
+    )
+
+    let profileByUserId = new Map<string, { display_name: string; user_type: 'human' | 'llm' | 'computer' }>()
+    if (agentIds.length > 0) {
+      const { data: profileRows } = await this.supabase
+        .from('user_profiles')
+        .select('user_id, display_name, user_type')
+        .in('user_id', agentIds)
+
+      profileByUserId = new Map(
+        (profileRows || []).map((profile: any) => [
+          profile.user_id,
+          {
+            display_name: profile.display_name,
+            user_type: profile.user_type,
+          },
+        ])
+      )
+    }
+
+    return conversationRows.map((conv: any) => ({
       id: conv.id,
       title: conv.title,
       lastMessageAt: new Date(conv.last_message_at || conv.updated_at),
       updatedAt: new Date(conv.updated_at),
+      agentUserId: conv.agent_user_id,
+      agentDisplayName: profileByUserId.get(conv.agent_user_id)?.display_name,
+      agentType: profileByUserId.get(conv.agent_user_id)?.user_type,
     }))
   }
 

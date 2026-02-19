@@ -40,11 +40,13 @@ export default function ChatApp() {
       .then((data) => {
         const mapped: Conversation[] = data.map(c => ({
           id: c.id,
-          name: c.title,
+          name: c.agentDisplayName || c.title,
           lastMessage: '',
           lastMessageTime: c.lastMessageAt.getTime(),
           unreadCount: 0,
           isOnline: false,
+          participantUserId: c.agentUserId,
+          participantType: c.agentType,
         }))
         setConversations(mapped)
       })
@@ -77,6 +79,20 @@ export default function ChatApp() {
     await signOut()
     router.push('/login')
   }, [signOut, router])
+
+  const handleOpenTasks = useCallback(() => {
+    router.push('/tasks')
+  }, [router])
+
+  const handleOpenProfile = useCallback(() => {
+    if (!currentUserId) return
+    router.push(`/profile/${currentUserId}`)
+  }, [router, currentUserId])
+
+  const handleOpenConversationProfile = useCallback(() => {
+    if (!selectedConversation?.participantUserId) return
+    router.push(`/profile/${selectedConversation.participantUserId}`)
+  }, [router, selectedConversation])
 
   const handleSelectConversation = useCallback((conversation: Conversation) => {
     setSelectedConversation(conversation)
@@ -134,8 +150,10 @@ export default function ChatApp() {
           title="Conversas"
           onLogout={handleLogout}
           userName={currentUsername}
+          onOpenProfile={handleOpenProfile}
+          onOpenTasks={handleOpenTasks}
         />
-        <div className="flex-1 overflow-y-auto">
+        <div className="safe-bottom flex-1 overflow-y-auto">
           {conversationsLoading ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
               Carregando conversas...
@@ -156,6 +174,7 @@ export default function ChatApp() {
       <ChatHeader
         conversation={selectedConversation}
         onBack={handleBack}
+        onOpenProfile={handleOpenConversationProfile}
       />
       <MessageList
         messages={messages}

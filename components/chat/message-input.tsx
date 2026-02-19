@@ -57,7 +57,7 @@ export function MessageInput({
   const hasContent = content.trim().length > 0
 
   return (
-    <div className="sticky bottom-0 bg-background border-t border-border px-3 py-2">
+    <div className="safe-bottom safe-x sticky bottom-0 bg-background border-t border-border px-3 py-2">
       <div className="flex items-end gap-2">
         <Button
           type="button"

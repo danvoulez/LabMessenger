@@ -34,6 +34,8 @@ export interface Conversation {
   unreadCount: number
   isOnline?: boolean
   isGroup?: boolean
+  participantUserId?: string
+  participantType?: 'human' | 'llm' | 'computer'
 }
 
 export interface User {
