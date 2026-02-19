@@ -17,7 +17,28 @@ export async function GET(request: NextRequest) {
   // RLS ensures user can only read messages from their own conversations
   const { data, error } = await supabase
     .from('messages')
-    .select('id, content, user_id, role, conversation_id, created_at, status, commands_executed, message_type, task_id, task_data')
+    .select(`
+      id,
+      content,
+      user_id,
+      role,
+      conversation_id,
+      created_at,
+      status,
+      commands_executed,
+      message_type,
+      task_id,
+      task_data,
+      message_attachments (
+        id,
+        bucket_id,
+        storage_path,
+        file_name,
+        mime_type,
+        size_bytes,
+        created_at
+      )
+    `)
     .eq('conversation_id', roomId)
     .order('created_at', { ascending: true })
 

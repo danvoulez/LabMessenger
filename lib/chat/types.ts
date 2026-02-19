@@ -11,6 +11,17 @@ export interface TaskProposal {
   commands_used?: number
 }
 
+export interface MessageAttachment {
+  id: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  storagePath: string
+  bucketId: string
+  url?: string
+  createdAt: number
+}
+
 export interface Message {
   id: string
   content: string
@@ -18,11 +29,12 @@ export interface Message {
   username: string
   roomId: string
   timestamp: number
-  status?: 'sending' | 'sent' | 'delivered' | 'read'
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'error'
   // Task approval system
-  message_type?: 'message' | 'task_proposal' | 'task_approval' | 'task_execution' | 'handover'
+  message_type?: 'message' | 'task_proposal' | 'task_approval' | 'task_execution' | 'handover' | 'file'
   task_id?: string
   task_data?: TaskProposal
+  attachments?: MessageAttachment[]
 }
 
 export interface Conversation {

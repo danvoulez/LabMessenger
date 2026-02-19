@@ -29,6 +29,18 @@ export interface ChatProvider {
   }): Promise<Message>
 
   /**
+   * Envia um arquivo como mensagem anexada.
+   * Opcional para adapters legados.
+   */
+  sendAttachment?(params: {
+    file: File
+    userId: string
+    username: string
+    roomId: string
+    caption?: string
+  }): Promise<Message>
+
+  /**
    * Busca mensagens de uma sala
    */
   getMessages(roomId: string): Promise<Message[]>

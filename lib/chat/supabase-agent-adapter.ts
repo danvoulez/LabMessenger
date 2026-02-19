@@ -1,6 +1,7 @@
 import type { ChatProvider } from './chat-provider'
 import type {
   Message,
+  MessageAttachment,
   MessageCallback,
   Unsubscribe,
   ConnectionStatus,
@@ -13,6 +14,19 @@ interface ConversationCache {
   agent_url: string
   cachedAt: number
 }
+
+interface DbAttachmentRow {
+  id: string
+  bucket_id: string
+  storage_path: string
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
+}
+
+const ATTACHMENTS_BUCKET = 'chat-files'
+const SIGNED_URL_EXPIRES_IN_SECONDS = 300
 
 export class SupabaseAgentAdapter implements ChatProvider {
   private supabase = createClient()
@@ -37,18 +51,108 @@ export class SupabaseAgentAdapter implements ChatProvider {
     this.statusCallbacks.forEach((cb) => cb(status))
   }
 
-  private mapDbMessage(msg: any): Message {
+  private async mapAttachments(rows: DbAttachmentRow[] | undefined): Promise<MessageAttachment[]> {
+    if (!rows || rows.length === 0) return []
+
+    const mapped = await Promise.all(
+      rows.map(async (row): Promise<MessageAttachment> => {
+        let url: string | undefined
+        try {
+          const { data } = await this.supabase.storage
+            .from(row.bucket_id || ATTACHMENTS_BUCKET)
+            .createSignedUrl(row.storage_path, SIGNED_URL_EXPIRES_IN_SECONDS)
+          url = data?.signedUrl
+        } catch {
+          url = undefined
+        }
+
+        return {
+          id: row.id,
+          fileName: row.file_name,
+          mimeType: row.mime_type,
+          sizeBytes: row.size_bytes,
+          storagePath: row.storage_path,
+          bucketId: row.bucket_id || ATTACHMENTS_BUCKET,
+          url,
+          createdAt: new Date(row.created_at).getTime(),
+        }
+      })
+    )
+
+    return mapped
+  }
+
+  private async mapDbMessage(msg: any): Promise<Message> {
+    const attachments = await this.mapAttachments(msg.message_attachments as DbAttachmentRow[] | undefined)
+
     return {
       id: msg.id,
       content: msg.content,
       userId: msg.user_id,
-      username: msg.role === 'assistant' ? 'Agent' : 'Você',
+      username: msg.role === 'assistant' ? 'Agent' : msg.role === 'system' ? 'Sistema' : 'Você',
       roomId: msg.conversation_id,
       timestamp: new Date(msg.created_at).getTime(),
       status: msg.status || 'sent',
       message_type: msg.message_type || 'message',
       task_id: msg.task_id ?? undefined,
       task_data: msg.task_data ?? undefined,
+      attachments,
+    }
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const normalized = fileName.normalize('NFKD').replace(/[^\x00-\x7F]/g, '')
+    return normalized.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').slice(0, 120) || 'file'
+  }
+
+  private async getMessageById(messageId: string): Promise<Message | null> {
+    const { data, error } = await this.supabase
+      .from('messages')
+      .select(`
+        id,
+        content,
+        user_id,
+        role,
+        conversation_id,
+        created_at,
+        status,
+        message_type,
+        task_id,
+        task_data,
+        message_attachments (
+          id,
+          bucket_id,
+          storage_path,
+          file_name,
+          mime_type,
+          size_bytes,
+          created_at
+        )
+      `)
+      .eq('id', messageId)
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) return null
+    return this.mapDbMessage(data)
+  }
+
+  private async handleRealtimeInsert(raw: any, callback: MessageCallback) {
+    try {
+      if (raw.message_type === 'handover') return
+
+      if (raw.message_type === 'file') {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        const fullMessage = await this.getMessageById(raw.id)
+        if (fullMessage) {
+          callback(fullMessage)
+          return
+        }
+      }
+
+      callback(await this.mapDbMessage(raw))
+    } catch (error) {
+      console.error('[SupabaseAgent] Failed to map realtime message:', error)
     }
   }
 
@@ -124,9 +228,87 @@ export class SupabaseAgentAdapter implements ChatProvider {
       if (error) throw error
 
       this.setStatus('connected')
-      return this.mapDbMessage(data)
+      return await this.mapDbMessage(data)
     } catch (error) {
       console.error('[SupabaseAgent] Send failed:', error)
+      this.setStatus('error')
+      throw error
+    }
+  }
+
+  async sendAttachment(params: {
+    file: File
+    userId: string
+    username: string
+    roomId: string
+    caption?: string
+  }): Promise<Message> {
+    let uploaded = false
+    let storagePath = ''
+    const messageId = crypto.randomUUID()
+    const fileName = this.sanitizeFileName(params.file.name || 'file')
+    const content = params.caption?.trim() || fileName
+
+    try {
+      const { error: messageInsertError } = await this.supabase
+        .from('messages')
+        .insert({
+          id: messageId,
+          conversation_id: params.roomId,
+          user_id: params.userId,
+          role: 'user',
+          content,
+          message_type: 'file',
+          status: 'sending',
+        })
+
+      if (messageInsertError) throw messageInsertError
+
+      storagePath = `${params.roomId}/${params.userId}/${messageId}/${fileName}`
+
+      const { error: uploadError } = await this.supabase.storage
+        .from(ATTACHMENTS_BUCKET)
+        .upload(storagePath, params.file, {
+          upsert: false,
+          contentType: params.file.type || 'application/octet-stream',
+        })
+
+      if (uploadError) throw uploadError
+      uploaded = true
+
+      const { error: attachmentInsertError } = await this.supabase
+        .from('message_attachments')
+        .insert({
+          message_id: messageId,
+          conversation_id: params.roomId,
+          user_id: params.userId,
+          bucket_id: ATTACHMENTS_BUCKET,
+          storage_path: storagePath,
+          file_name: fileName,
+          mime_type: params.file.type || 'application/octet-stream',
+          size_bytes: params.file.size,
+        })
+
+      if (attachmentInsertError) throw attachmentInsertError
+
+      const { error: updateMessageError } = await this.supabase
+        .from('messages')
+        .update({ status: 'sent' })
+        .eq('id', messageId)
+
+      if (updateMessageError) throw updateMessageError
+
+      const message = await this.getMessageById(messageId)
+      if (!message) throw new Error('Unable to load uploaded file message')
+      this.setStatus('connected')
+      return message
+    } catch (error) {
+      if (uploaded && storagePath) {
+        await this.supabase.storage.from(ATTACHMENTS_BUCKET).remove([storagePath])
+      }
+
+      await this.supabase.from('messages').delete().eq('id', messageId)
+      console.error('[SupabaseAgent] File upload failed:', error)
       this.setStatus('error')
       throw error
     }
@@ -145,16 +327,24 @@ export class SupabaseAgentAdapter implements ChatProvider {
         status,
         message_type,
         task_id,
-        task_data
+        task_data,
+        message_attachments (
+          id,
+          bucket_id,
+          storage_path,
+          file_name,
+          mime_type,
+          size_bytes,
+          created_at
+        )
       `)
       .eq('conversation_id', roomId)
       .order('created_at', { ascending: true })
 
     if (error) throw error
 
-    return (data || [])
-      .filter((msg: any) => msg.message_type !== 'handover')
-      .map((msg: any) => this.mapDbMessage(msg))
+    const visibleMessages = (data || []).filter((msg: any) => msg.message_type !== 'handover')
+    return Promise.all(visibleMessages.map((msg: any) => this.mapDbMessage(msg)))
   }
 
   subscribe(roomId: string, callback: MessageCallback): Unsubscribe {
@@ -171,9 +361,7 @@ export class SupabaseAgentAdapter implements ChatProvider {
           filter: `conversation_id=eq.${roomId}`,
         },
         (payload: any) => {
-          const msg = payload.new as any
-          if (msg.message_type === 'handover') return
-          callback(this.mapDbMessage(msg))
+          void this.handleRealtimeInsert(payload.new as any, callback)
         }
       )
       .subscribe((status: string) => {

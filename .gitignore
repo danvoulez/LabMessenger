@@ -20,6 +20,9 @@ yarn-error.log*
 .env*
 .auth-bootstrap.txt
 .agent-auth-admin.txt
+supabase/.temp/
+!.env.local.example
+!.env.admin.local.example
 
 # vercel
 .vercel

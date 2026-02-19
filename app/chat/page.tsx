@@ -105,11 +105,35 @@ export default function ChatApp() {
   const handleSendMessage = useCallback(async (content: string) => {
     if (!selectedConversation || !currentUserId) return
 
-    await chatProvider.sendMessage({
+    const sentMessage = await chatProvider.sendMessage({
       content,
       userId: currentUserId,
       username: currentUsername,
       roomId: selectedConversation.id,
+    })
+
+    setMessages((prev) => {
+      if (prev.some((message) => message.id === sentMessage.id)) return prev
+      return [...prev, sentMessage]
+    })
+  }, [selectedConversation, currentUserId, currentUsername])
+
+  const handleSendAttachment = useCallback(async (file: File) => {
+    if (!selectedConversation || !currentUserId) return
+    if (!chatProvider.sendAttachment) {
+      throw new Error('Attachment upload is not available in the current provider')
+    }
+
+    const sentMessage = await chatProvider.sendAttachment({
+      file,
+      userId: currentUserId,
+      username: currentUsername,
+      roomId: selectedConversation.id,
+    })
+
+    setMessages((prev) => {
+      if (prev.some((message) => message.id === sentMessage.id)) return prev
+      return [...prev, sentMessage]
     })
   }, [selectedConversation, currentUserId, currentUsername])
 
@@ -182,7 +206,7 @@ export default function ChatApp() {
         onApproveTask={handleApproveTask}
         onRejectTask={handleRejectTask}
       />
-      <MessageInput onSend={handleSendMessage} />
+      <MessageInput onSend={handleSendMessage} onSendAttachment={handleSendAttachment} />
     </main>
   )
 }

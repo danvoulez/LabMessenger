@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   commands_executed JSONB,
   status TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('sending', 'sent', 'delivered', 'error')),
   -- Task approval system
-  message_type TEXT DEFAULT 'message' CHECK (message_type IN ('message', 'task_proposal', 'task_approval', 'task_execution', 'handover')),
+  message_type TEXT DEFAULT 'message' CHECK (message_type IN ('message', 'task_proposal', 'task_approval', 'task_execution', 'handover', 'file')),
   task_id UUID, -- ID da tarefa (para linking proposal → approval → execution)
   task_data JSONB -- {title, steps, estimated_commands, max_commands, commands_used}
 );

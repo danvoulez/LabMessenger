@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { Check, CheckCheck } from 'lucide-react'
+import { AlertCircle, Check, CheckCheck, Download, Paperclip } from 'lucide-react'
 import type { Message } from '@/lib/chat/types'
 import { TaskApprovalCard } from '@/components/TaskApprovalCard'
 import { SkeletonMessage } from '@/components/SkeletonMessage'
@@ -29,6 +29,9 @@ function MessageCheckIcon({ status }: { status?: Message['status'] }) {
   if (!status || status === 'sending') {
     return <Check className="h-3.5 w-3.5 text-muted-foreground/50" />
   }
+  if (status === 'error') {
+    return <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
+  }
   if (status === 'sent') {
     return <Check className="h-3.5 w-3.5 text-muted-foreground" />
   }
@@ -36,6 +39,18 @@ function MessageCheckIcon({ status }: { status?: Message['status'] }) {
     return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />
   }
   return <CheckCheck className="h-3.5 w-3.5 text-primary" />
+}
+
+function formatBytes(size: number): string {
+  if (!Number.isFinite(size) || size <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = size
+  let index = 0
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024
+    index += 1
+  }
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 
 export function MessageList({ 
@@ -89,6 +104,11 @@ export function MessageList({
           const messageType = message.message_type
           const taskData = message.task_data
           const taskId = message.task_id
+          const attachments = message.attachments || []
+          const hideRepeatedFileName = messageType === 'file' &&
+            attachments.length === 1 &&
+            message.content.trim() === attachments[0].fileName
+          const shouldShowContent = !!message.content.trim() && !hideRepeatedFileName
           
           return (
             <div
@@ -116,9 +136,38 @@ export function MessageList({
                       : 'bg-card border border-border rounded-bl-md'
                   }`}
                 >
-                  <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-                    {message.content}
-                  </p>
+                  {attachments.length > 0 && (
+                    <div className={shouldShowContent ? 'mb-2' : ''}>
+                      {attachments.map((attachment) => (
+                        <a
+                          key={attachment.id}
+                          href={attachment.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`flex items-start gap-2 rounded-xl border px-2.5 py-2 mb-1 last:mb-0 ${
+                            isOwn
+                              ? 'border-primary-foreground/20 bg-primary-foreground/10'
+                              : 'border-border bg-background'
+                          }`}
+                        >
+                          <Paperclip className={`h-4 w-4 mt-0.5 shrink-0 ${isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'}`} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                            <p className={`text-[11px] ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                              {formatBytes(attachment.sizeBytes)}
+                            </p>
+                          </div>
+                          <Download className={`h-4 w-4 mt-0.5 shrink-0 ${isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'}`} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {shouldShowContent && (
+                    <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                  )}
                   <div className={`flex items-center justify-end gap-1 mt-1 ${
                     isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
                   }`}>

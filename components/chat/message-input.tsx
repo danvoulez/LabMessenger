@@ -9,6 +9,7 @@ import { usePrefetch } from '@/hooks/usePrefetch'
 
 interface MessageInputProps {
   onSend: (content: string) => void
+  onSendAttachment?: (file: File) => Promise<void>
   disabled?: boolean
   placeholder?: string
   agentUrl?: string
@@ -16,12 +17,16 @@ interface MessageInputProps {
 
 export function MessageInput({ 
   onSend, 
+  onSendAttachment,
   disabled = false,
   placeholder = 'Mensagem',
   agentUrl
 }: MessageInputProps) {
   const [content, setContent] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   // ⚡ Prefetch: pré-aquece conexões ao começar a digitar
   const { onUserStartTyping } = usePrefetch({ 
@@ -31,13 +36,37 @@ export function MessageInput({
 
   const handleSubmit = () => {
     const trimmed = content.trim()
-    if (trimmed && !disabled) {
+    if (trimmed && !disabled && !isUploading) {
       onSend(trimmed)
       setContent('')
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
     }
+  }
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !onSendAttachment || disabled || isUploading) return
+
+    setUploadError(null)
+    setIsUploading(true)
+
+    try {
+      await onSendAttachment(file)
+    } catch (error) {
+      const fallback = 'Falha no upload do arquivo. Tente novamente.'
+      const message = error instanceof Error && error.message ? error.message : fallback
+      setUploadError(message)
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleOpenFilePicker = () => {
+    if (!onSendAttachment || disabled || isUploading) return
+    fileInputRef.current?.click()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -59,12 +88,23 @@ export function MessageInput({
   return (
     <div className="safe-bottom safe-x sticky bottom-0 bg-background border-t border-border px-3 py-2">
       <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFileSelect}
+          disabled={disabled || isUploading}
+          accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.csv,.zip"
+        />
+
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
           aria-label="Anexar arquivo"
+          onClick={handleOpenFilePicker}
+          disabled={!onSendAttachment || disabled || isUploading}
         >
           <Paperclip className="h-5 w-5" />
         </Button>
@@ -86,8 +126,8 @@ export function MessageInput({
             onChange={(e) => setContent(e.target.value)}
             onInput={onUserStartTyping}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
+            placeholder={isUploading ? 'Enviando arquivo...' : placeholder}
+            disabled={disabled || isUploading}
             rows={1}
             className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-[16px] leading-relaxed max-h-[120px] py-1"
           />
@@ -96,7 +136,7 @@ export function MessageInput({
         <Button
           type="button"
           onClick={handleSubmit}
-          disabled={disabled || !hasContent}
+          disabled={disabled || !hasContent || isUploading}
           size="icon"
           className="h-10 w-10 shrink-0 rounded-full"
           aria-label="Enviar mensagem"
@@ -104,6 +144,9 @@ export function MessageInput({
           <Send className="h-5 w-5" />
         </Button>
       </div>
+      {uploadError && (
+        <p className="mt-2 text-xs text-destructive">{uploadError}</p>
+      )}
     </div>
   )
 }
