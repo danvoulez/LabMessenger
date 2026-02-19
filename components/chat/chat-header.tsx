@@ -1,14 +1,17 @@
 'use client'
 
-import { ChevronLeft, MoreVertical, Phone, Video } from 'lucide-react'
+import { ChevronLeft, LoaderCircle, MoreVertical, Phone, Video, Wifi, WifiOff } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import type { Conversation } from '@/lib/chat/types'
+import type { ConnectionStatus } from '@/lib/chat'
+import { cn } from '@/lib/utils'
 
 interface ChatHeaderProps {
   conversation: Conversation
   onBack: () => void
   onOpenProfile?: () => void
+  connectionStatus?: ConnectionStatus
 }
 
 function getInitials(name: string): string {
@@ -20,7 +23,32 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
-export function ChatHeader({ conversation, onBack, onOpenProfile }: ChatHeaderProps) {
+function ConnectionMini({ status = 'disconnected' }: { status?: ConnectionStatus }) {
+  if (status === 'connecting') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+        <LoaderCircle className="h-3 w-3 animate-spin" />
+        conectando
+      </span>
+    )
+  }
+  if (status === 'connected') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
+        <Wifi className="h-3 w-3" />
+        conectado
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-rose-500">
+      <WifiOff className="h-3 w-3" />
+      sem conexão
+    </span>
+  )
+}
+
+export function ChatHeader({ conversation, onBack, onOpenProfile, connectionStatus }: ChatHeaderProps) {
   return (
     <header className="safe-top safe-x sticky top-0 z-10 flex items-center gap-2 px-2 py-2 bg-card border-b border-border">
       <Button
@@ -46,18 +74,30 @@ export function ChatHeader({ conversation, onBack, onOpenProfile }: ChatHeaderPr
               {getInitials(conversation.name)}
             </AvatarFallback>
           </Avatar>
-          {conversation.isOnline && (
-            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-chat-online border-2 border-card" />
-          )}
+          <span
+            className={cn(
+              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card shadow-[0_0_10px_currentColor]',
+              conversation.isOnline
+                ? 'bg-emerald-400 text-emerald-400 signal-online'
+                : 'bg-rose-400 text-rose-400 signal-offline'
+            )}
+          />
         </div>
 
         <div className="min-w-0">
           <h1 className="font-semibold text-foreground truncate leading-tight">
             {conversation.name}
           </h1>
-          <p className="text-xs text-muted-foreground">
-            {conversation.isOnline ? 'Online' : 'Offline'}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className={cn(
+              'text-xs',
+              conversation.isOnline ? 'text-emerald-600' : 'text-rose-500'
+            )}>
+              {conversation.isOnline ? 'Online' : 'Offline'}
+            </p>
+            <span className="text-muted-foreground/60">•</span>
+            <ConnectionMini status={connectionStatus} />
+          </div>
         </div>
       </button>
       

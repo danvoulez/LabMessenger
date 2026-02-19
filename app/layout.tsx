@@ -15,14 +15,14 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'LAB 512 Remote Control',
-  description: 'Controle remoto do LAB 512 em Lisboa via agente Claude',
+  title: 'LAB Messenger',
+  description: 'Mensageria em tempo real entre Dan e agentes LAB',
   generator: 'v0.app',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'LAB 512',
+    title: 'LAB Messenger',
   },
   icons: {
     icon: [
@@ -46,7 +46,10 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        <meta name="application-name" content="LAB Messenger" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="LAB Messenger" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#000000" />
       </head>

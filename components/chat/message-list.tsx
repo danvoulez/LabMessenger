@@ -7,6 +7,7 @@ import { TaskApprovalCard } from '@/components/TaskApprovalCard'
 import { SkeletonMessage } from '@/components/SkeletonMessage'
 import { MessageStatusIndicator } from '@/components/MessageStatusIndicator'
 import { MessageStatus } from '@/types/message-status'
+import { cn } from '@/lib/utils'
 
 interface MessageListProps {
   messages: Message[]
@@ -65,7 +66,7 @@ export function MessageList({
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: messages.length > 2 ? 'smooth' : 'auto' })
   }, [messages, streamingText])
 
   if (isLoading) {
@@ -130,12 +131,18 @@ export function MessageList({
               ) : (
                 /* Regular Message */
                 <div
-                  className={`relative max-w-[85%] px-3 py-2 rounded-2xl ${
+                  className={`relative max-w-[85%] px-3 py-2 rounded-2xl overflow-hidden ${
                     isOwn
                       ? 'bg-primary text-primary-foreground rounded-br-md'
                       : 'bg-card border border-border rounded-bl-md'
                   }`}
                 >
+                  {isOwn && message.status === 'sending' && (
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary-foreground/20">
+                      <div className="h-full w-1/3 bg-primary-foreground/80 animate-progress" />
+                    </div>
+                  )}
+
                   {attachments.length > 0 && (
                     <div className={shouldShowContent ? 'mb-2' : ''}>
                       {attachments.map((attachment) => (
@@ -144,20 +151,16 @@ export function MessageList({
                           href={attachment.url}
                           target="_blank"
                           rel="noreferrer"
-                          className={`flex items-start gap-2 rounded-xl border px-2.5 py-2 mb-1 last:mb-0 ${
-                            isOwn
-                              ? 'border-primary-foreground/20 bg-primary-foreground/10'
-                              : 'border-border bg-background'
-                          }`}
+                          className="block mb-1 last:mb-0 rounded-xl overflow-hidden border border-white/10 bg-zinc-900 shadow-sm transition-transform duration-200 hover:scale-[1.01]"
                         >
-                          <Paperclip className={`h-4 w-4 mt-0.5 shrink-0 ${isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'}`} />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                            <p className={`text-[11px] ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                              {formatBytes(attachment.sizeBytes)}
-                            </p>
+                          <div className="px-2.5 py-2 bg-black flex items-center gap-2 text-white">
+                            <Paperclip className="h-4 w-4 shrink-0 text-white/80" />
+                            <p className="text-sm font-medium truncate min-w-0">{attachment.fileName}</p>
+                            <Download className="h-4 w-4 shrink-0 text-white/80 ml-auto" />
                           </div>
-                          <Download className={`h-4 w-4 mt-0.5 shrink-0 ${isOwn ? 'text-primary-foreground/80' : 'text-muted-foreground'}`} />
+                          <div className="px-2.5 py-1.5 bg-zinc-800 text-zinc-300 text-[11px]">
+                            {formatBytes(attachment.sizeBytes)}
+                          </div>
                         </a>
                       ))}
                     </div>
@@ -176,6 +179,14 @@ export function MessageList({
                     </span>
                     {isOwn && <MessageCheckIcon status={message.status} />}
                   </div>
+                  {isOwn && message.status === 'error' && (
+                    <p className={cn(
+                      'mt-1 text-[11px]',
+                      isOwn ? 'text-rose-200' : 'text-rose-500'
+                    )}>
+                      Falha no envio. Tente novamente.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

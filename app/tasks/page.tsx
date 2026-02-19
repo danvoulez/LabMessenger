@@ -66,10 +66,10 @@ interface TaskItem {
 }
 
 const STATUS_META: Record<TaskStatus, { label: string; dotClass: string }> = {
-  completed: { label: 'Concluída', dotClass: 'bg-emerald-500' },
-  approved: { label: 'Aprovada', dotClass: 'bg-amber-500' },
-  pending: { label: 'Pendente', dotClass: 'bg-amber-500' },
-  rejected: { label: 'Rejeitada', dotClass: 'bg-rose-500' },
+  completed: { label: 'Concluída', dotClass: 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]' },
+  approved: { label: 'Aprovada', dotClass: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]' },
+  pending: { label: 'Pendente', dotClass: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]' },
+  rejected: { label: 'Rejeitada', dotClass: 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.8)]' },
 }
 
 function parseTaskIdFromCommand(raw: string, prefix: 'APPROVED' | 'REJECTED'): string | null {
@@ -225,19 +225,19 @@ export default function TasksPage() {
 
   return (
     <main className="flex flex-col h-dvh bg-background">
-      <header className="safe-top safe-x sticky top-0 z-10 flex items-center gap-2 px-2 py-2 bg-card border-b border-border">
+      <header className="safe-top safe-x sticky top-0 z-10 flex items-center gap-2 px-2 py-2 bg-black border-b border-zinc-700">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => router.push('/chat')}
-          className="shrink-0 h-10 w-10 rounded-full"
+          className="shrink-0 h-10 w-10 rounded-full text-zinc-200 hover:text-white hover:bg-zinc-800"
           aria-label="Voltar"
         >
           <ChevronLeft className="h-6 w-6" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-semibold text-foreground">Tasks</h1>
-          <p className="text-xs text-muted-foreground">Propostas e execuções dos agentes</p>
+          <h1 className="text-xl font-semibold text-white">Tasks</h1>
+          <p className="text-xs text-zinc-400">Propostas e execuções dos agentes</p>
         </div>
       </header>
 
@@ -256,51 +256,51 @@ export default function TasksPage() {
               return (
                 <article
                   key={task.key}
-                  className="border border-border rounded-xl bg-card overflow-hidden"
+                  className="rounded-2xl overflow-hidden border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-[0_10px_30px_rgba(0,0,0,0.2)]"
                 >
                   <button
                     type="button"
-                    className="w-full px-3 py-3 text-left flex items-start gap-3"
+                    className="w-full px-3 py-3 text-left flex items-start gap-3 bg-black"
                     onClick={() => toggleExpanded(task.key)}
                   >
                     <span className={`mt-1.5 h-2.5 w-2.5 rounded-full ${status.dotClass}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium text-foreground truncate">{task.title}</p>
-                        <span className="text-xs text-muted-foreground shrink-0">{status.label}</span>
+                        <p className="font-medium text-white truncate">{task.title}</p>
+                        <span className="text-xs text-zinc-400 shrink-0">{status.label}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      <p className="text-xs text-zinc-500 truncate mt-0.5">
                         {task.conversationTitle} · {formatDate(task.createdAt)}
                       </p>
                     </div>
                     {isOpen ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <ChevronDown className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" />
                     ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" />
                     )}
                   </button>
 
                   {isOpen && (
-                    <div className="px-3 pb-3 pt-1 border-t border-border">
+                    <div className="px-3 pb-3 pt-2 border-t border-zinc-700 bg-zinc-800">
                       {task.description && (
-                        <p className="text-sm text-foreground mb-2">{task.description}</p>
+                        <p className="text-sm text-zinc-100 mb-2">{task.description}</p>
                       )}
                       {task.steps.length > 0 && (
                         <ul className="space-y-1 mb-3">
                           {task.steps.map((step, index) => (
-                            <li key={`${task.key}-step-${index}`} className="text-sm text-foreground flex gap-2">
-                              <span className="text-muted-foreground w-4 shrink-0">{index + 1}.</span>
+                            <li key={`${task.key}-step-${index}`} className="text-sm text-zinc-100 flex gap-2">
+                              <span className="text-zinc-400 w-4 shrink-0">{index + 1}.</span>
                               <span>{step}</span>
                             </li>
                           ))}
                         </ul>
                       )}
-                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                        <div>Comandos estimados: {task.estimatedCommands ?? '-'}</div>
-                        <div>Risco: {task.riskLevel || '-'}</div>
-                        <div>Máximo permitido: {task.maxCommands ?? '-'}</div>
-                        <div>Usados: {task.commandsUsed ?? 0}</div>
-                        <div className="col-span-2">Atualizado: {formatDate(task.updatedAt)}</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-zinc-300">
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5">Comandos estimados: {task.estimatedCommands ?? '-'}</div>
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5">Risco: {task.riskLevel || '-'}</div>
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5">Máximo permitido: {task.maxCommands ?? '-'}</div>
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5">Usados: {task.commandsUsed ?? 0}</div>
+                        <div className="col-span-2 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5">Atualizado: {formatDate(task.updatedAt)}</div>
                       </div>
                     </div>
                   )}

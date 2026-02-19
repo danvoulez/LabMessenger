@@ -25,8 +25,23 @@ interface DbAttachmentRow {
   created_at: string
 }
 
+interface DbConversationMessagePreviewRow {
+  conversation_id: string
+  content: string
+  created_at: string
+  role: 'user' | 'assistant' | 'system'
+  message_type?: 'message' | 'task_proposal' | 'task_approval' | 'task_execution' | 'handover' | 'file'
+}
+
+interface DbObservabilityRow {
+  user_id: string
+  status: 'healthy' | 'warning' | 'critical'
+  updated_at: string
+}
+
 const ATTACHMENTS_BUCKET = 'chat-files'
 const SIGNED_URL_EXPIRES_IN_SECONDS = 300
+const ONLINE_STALE_AFTER_MS = 5 * 60 * 1000
 
 export class SupabaseAgentAdapter implements ChatProvider {
   private supabase = createClient()
@@ -422,6 +437,9 @@ export class SupabaseAgentAdapter implements ChatProvider {
     agentUserId: string
     agentDisplayName?: string
     agentType?: 'human' | 'llm' | 'computer'
+    lastMessagePreview?: string
+    unreadCount?: number
+    isOnline?: boolean
   }>> {
     const { data, error } = await this.supabase
       .from('conversations')
@@ -432,6 +450,7 @@ export class SupabaseAgentAdapter implements ChatProvider {
     if (error) throw error
 
     const conversationRows = data || []
+    const conversationIds = conversationRows.map((conv: any) => conv.id)
     const agentIds = Array.from(
       new Set(
         conversationRows
@@ -458,6 +477,57 @@ export class SupabaseAgentAdapter implements ChatProvider {
       )
     }
 
+    let previewByConversationId = new Map<string, DbConversationMessagePreviewRow>()
+    let latestAssistantTimestampByConversationId = new Map<string, number>()
+    if (conversationRows.length > 0) {
+      const { data: messageRows } = await this.supabase
+        .from('messages')
+        .select('conversation_id, content, created_at, role, message_type')
+        .in('conversation_id', conversationIds)
+        .order('created_at', { ascending: false })
+        .limit(Math.max(conversationRows.length * 20, 60))
+
+      for (const row of (messageRows || []) as DbConversationMessagePreviewRow[]) {
+        if (!previewByConversationId.has(row.conversation_id)) {
+          previewByConversationId.set(row.conversation_id, row)
+        }
+        if (row.role === 'assistant' && !latestAssistantTimestampByConversationId.has(row.conversation_id)) {
+          latestAssistantTimestampByConversationId.set(row.conversation_id, new Date(row.created_at).getTime())
+        }
+      }
+    }
+
+    const onlineByAgentUserId = new Map<string, boolean>()
+    if (agentIds.length > 0) {
+      try {
+        const { data: observabilityRows } = await this.supabase
+          .from('user_observability_services')
+          .select('user_id, status, updated_at')
+          .in('user_id', agentIds)
+          .eq('service_name', 'agent-server')
+
+        for (const row of (observabilityRows || []) as DbObservabilityRow[]) {
+          const updatedAt = new Date(row.updated_at).getTime()
+          const recentEnough = Date.now() - updatedAt < ONLINE_STALE_AFTER_MS
+          if (row.status === 'healthy' && recentEnough) {
+            onlineByAgentUserId.set(row.user_id, true)
+          } else if (!onlineByAgentUserId.has(row.user_id)) {
+            onlineByAgentUserId.set(row.user_id, false)
+          }
+        }
+      } catch {
+        // Observability table may not exist in older environments.
+      }
+    }
+
+    const renderPreview = (preview: DbConversationMessagePreviewRow | undefined): string => {
+      if (!preview) return ''
+      if (preview.message_type === 'file') return '📎 Arquivo'
+      if (preview.message_type === 'task_proposal') return '📋 Aprovação de tarefa'
+      if (preview.message_type === 'task_execution') return '⚙️ Execução de tarefa'
+      return preview.content || ''
+    }
+
     return conversationRows.map((conv: any) => ({
       id: conv.id,
       title: conv.title,
@@ -466,6 +536,15 @@ export class SupabaseAgentAdapter implements ChatProvider {
       agentUserId: conv.agent_user_id,
       agentDisplayName: profileByUserId.get(conv.agent_user_id)?.display_name,
       agentType: profileByUserId.get(conv.agent_user_id)?.user_type,
+      lastMessagePreview: renderPreview(previewByConversationId.get(conv.id)),
+      unreadCount: 0,
+      isOnline: onlineByAgentUserId.has(conv.agent_user_id)
+        ? onlineByAgentUserId.get(conv.agent_user_id)
+        : (() => {
+            const assistantAt = latestAssistantTimestampByConversationId.get(conv.id)
+            if (!assistantAt) return false
+            return Date.now() - assistantAt < ONLINE_STALE_AFTER_MS
+          })(),
     }))
   }
 
