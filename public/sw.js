@@ -1,5 +1,5 @@
 // Service Worker para PWA - Cache offline básico
-const CACHE_NAME = 'lab512-v1'
+const CACHE_NAME = 'lab512-v2'
 const urlsToCache = [
   '/',
   '/chat',
@@ -11,6 +11,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
+      .then(() => self.skipWaiting())
   )
 })
 
@@ -25,7 +26,7 @@ self.addEventListener('activate', event => {
           }
         })
       )
-    })
+    }).then(() => self.clients.claim())
   )
 })
 
