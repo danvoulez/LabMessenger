@@ -28,7 +28,7 @@ function ConnectionBadge({ status = 'disconnected', theme = 'light' }: { status?
       <span className={cn(
         'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] border',
         theme === 'dark'
-          ? 'border-primary-foreground/25 text-primary-foreground/80 bg-primary-foreground/8'
+          ? 'border-white/20 text-white/80 bg-white/5'
           : 'border-border text-muted-foreground bg-muted/70'
       )}>
         <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -66,7 +66,7 @@ function ConnectionBadge({ status = 'disconnected', theme = 'light' }: { status?
     <span className={cn(
       'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] border',
       theme === 'dark'
-        ? 'border-primary-foreground/25 text-primary-foreground/80 bg-primary-foreground/8'
+        ? 'border-white/20 text-white/80 bg-white/5'
         : 'border-border text-muted-foreground bg-muted/70'
     )}>
       <WifiOff className="h-3 w-3" />
@@ -90,11 +90,11 @@ export function AppHeader({
     <header className={cn(
       'safe-top safe-x sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b',
       isDark
-        ? 'bg-primary border-primary-foreground/12'
+        ? 'bg-zinc-900 border-white/10'
         : 'bg-card border-border'
     )}>
       <div className="min-w-0">
-        <h1 className={cn('text-xl font-semibold truncate', isDark ? 'text-primary-foreground' : 'text-foreground')}>{title}</h1>
+        <h1 className={cn('text-xl font-semibold truncate', isDark ? 'text-white' : 'text-foreground')}>{title}</h1>
         <div className="mt-1">
           <ConnectionBadge status={connectionStatus} theme={theme} />
         </div>
@@ -108,7 +108,7 @@ export function AppHeader({
             className={cn(
               'h-10 w-10 rounded-full',
               isDark
-                ? 'text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10'
+                ? 'text-white/70 hover:text-white hover:bg-white/10'
                 : 'text-muted-foreground hover:text-foreground'
             )}
             aria-label="Mais opções"

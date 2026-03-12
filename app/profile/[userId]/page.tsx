@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Phone, Video } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { createClient } from '@/utils/supabase/client'
 
 type UserType = 'human' | 'llm' | 'computer'
 type ServiceStatus = 'healthy' | 'warning' | 'critical'
+type SandboxMode = 'permissive' | 'restricted'
 
 interface UserProfileRow {
   user_id: string
@@ -32,6 +33,11 @@ interface ObservabilityServiceRow {
   updated_at: string
 }
 
+interface ConversationSettingsRow {
+  id: string
+  metadata: Record<string, unknown> | null
+}
+
 const PROFILE_TYPE_META: Record<UserType, { label: string; toneClass: string }> = {
   human: { label: 'Human', toneClass: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
   llm: { label: 'LLM', toneClass: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -42,6 +48,17 @@ const SERVICE_STATUS_META: Record<ServiceStatus, { label: string; dotClass: stri
   healthy: { label: 'Healthy', dotClass: 'bg-emerald-500' },
   warning: { label: 'Warning', dotClass: 'bg-amber-500' },
   critical: { label: 'Critical', dotClass: 'bg-rose-500' },
+}
+
+const SANDBOX_MODE_META: Record<SandboxMode, { label: string; helper: string }> = {
+  permissive: {
+    label: 'Pode muito',
+    helper: 'Com menos bloqueios. O agente pode executar mais ações com menos fricção.',
+  },
+  restricted: {
+    label: 'Mais restrito',
+    helper: 'Com mais proteção. Prioriza confirmação explícita antes de ações sensíveis.',
+  },
 }
 
 function getInitials(name: string): string {
@@ -69,9 +86,15 @@ function formatDetailValue(value: unknown): string {
   return JSON.stringify(value)
 }
 
+function parseSandboxMode(metadata: Record<string, unknown> | null | undefined): SandboxMode {
+  if (metadata?.sandbox_mode === 'permissive') return 'permissive'
+  return 'restricted'
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const params = useParams<{ userId: string }>()
+  const searchParams = useSearchParams()
   const { user, isLoading, isAuthenticated } = useAuth()
   const supabase = useMemo(() => createClient(), [])
 
@@ -79,11 +102,21 @@ export default function ProfilePage() {
   const [services, setServices] = useState<ObservabilityServiceRow[]>([])
   const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set())
   const [loadingProfile, setLoadingProfile] = useState(true)
+  const [modeConversationId, setModeConversationId] = useState<string | null>(null)
+  const [conversationMetadata, setConversationMetadata] = useState<Record<string, unknown>>({})
+  const [sandboxMode, setSandboxMode] = useState<SandboxMode>('restricted')
+  const [sandboxModeSaving, setSandboxModeSaving] = useState(false)
+  const [sandboxModeFeedback, setSandboxModeFeedback] = useState<string | null>(null)
 
   const targetUserId = useMemo(() => {
     if (!params?.userId) return ''
     return Array.isArray(params.userId) ? params.userId[0] : params.userId
   }, [params?.userId])
+
+  const requestedConversationId = useMemo(() => {
+    const value = searchParams.get('conversationId') || ''
+    return value.trim()
+  }, [searchParams])
 
   const isOwnProfile = !!user?.id && user.id === targetUserId
 
@@ -107,6 +140,7 @@ export default function ProfilePage() {
 
     const loadProfile = async () => {
       setLoadingProfile(true)
+      setSandboxModeFeedback(null)
 
       const { data: profileRow } = await supabase
         .from('user_profiles')
@@ -117,6 +151,9 @@ export default function ProfilePage() {
       if (!profileRow) {
         setProfile(null)
         setServices([])
+        setModeConversationId(null)
+        setConversationMetadata({})
+        setSandboxMode('restricted')
         setLoadingProfile(false)
         return
       }
@@ -132,8 +169,54 @@ export default function ProfilePage() {
           .order('updated_at', { ascending: false })
 
         setServices((serviceRows || []) as ObservabilityServiceRow[])
+
+        if (user.id !== targetUserId) {
+          let conversationRow: ConversationSettingsRow | null = null
+
+          if (requestedConversationId) {
+            const { data } = await supabase
+              .from('conversations')
+              .select('id, metadata')
+              .eq('id', requestedConversationId)
+              .eq('user_id', user.id)
+              .eq('agent_user_id', targetUserId)
+              .maybeSingle()
+
+            conversationRow = (data as ConversationSettingsRow | null) ?? null
+          }
+
+          if (!conversationRow) {
+            const { data } = await supabase
+              .from('conversations')
+              .select('id, metadata')
+              .eq('user_id', user.id)
+              .eq('agent_user_id', targetUserId)
+              .order('updated_at', { ascending: false })
+              .limit(1)
+
+            conversationRow = ((data && data[0]) as ConversationSettingsRow | undefined) ?? null
+          }
+
+          if (conversationRow) {
+            const nextMetadata = (conversationRow.metadata || {}) as Record<string, unknown>
+            setModeConversationId(conversationRow.id)
+            setConversationMetadata(nextMetadata)
+            setSandboxMode(parseSandboxMode(nextMetadata))
+          } else {
+            setModeConversationId(null)
+            setConversationMetadata({})
+            setSandboxMode('restricted')
+          }
+        } else {
+          setModeConversationId(null)
+          setConversationMetadata({})
+          setSandboxMode('restricted')
+        }
       } else {
         setServices([])
+        setModeConversationId(null)
+        setConversationMetadata({})
+        setSandboxMode('restricted')
       }
 
       setLoadingProfile(false)
@@ -142,9 +225,47 @@ export default function ProfilePage() {
     loadProfile().catch(() => {
       setProfile(null)
       setServices([])
+      setModeConversationId(null)
+      setConversationMetadata({})
+      setSandboxMode('restricted')
+      setSandboxModeFeedback('Não foi possível carregar as configurações deste contato.')
       setLoadingProfile(false)
     })
-  }, [supabase, targetUserId, user?.id])
+  }, [requestedConversationId, supabase, targetUserId, user?.id])
+
+  const handleSandboxModeChange = useCallback(async (nextMode: SandboxMode) => {
+    if (!user?.id || !targetUserId || !modeConversationId || sandboxModeSaving) return
+    if (sandboxMode === nextMode) return
+
+    const previousMode = sandboxMode
+    setSandboxMode(nextMode)
+    setSandboxModeSaving(true)
+    setSandboxModeFeedback(null)
+
+    const nextMetadata: Record<string, unknown> = {
+      ...conversationMetadata,
+      sandbox_mode: nextMode,
+      sandbox_mode_updated_at: new Date().toISOString(),
+    }
+
+    const { error } = await supabase
+      .from('conversations')
+      .update({ metadata: nextMetadata })
+      .eq('id', modeConversationId)
+      .eq('user_id', user.id)
+      .eq('agent_user_id', targetUserId)
+
+    if (error) {
+      setSandboxMode(previousMode)
+      setSandboxModeFeedback('Falha ao salvar modo. Tente novamente.')
+      setSandboxModeSaving(false)
+      return
+    }
+
+    setConversationMetadata(nextMetadata)
+    setSandboxModeFeedback(`Modo salvo: ${SANDBOX_MODE_META[nextMode].label}.`)
+    setSandboxModeSaving(false)
+  }, [conversationMetadata, modeConversationId, sandboxMode, sandboxModeSaving, supabase, targetUserId, user?.id])
 
   if (isLoading) {
     return (
@@ -179,6 +300,7 @@ export default function ProfilePage() {
   const safeProfile = profile
   const typeMeta = safeProfile ? PROFILE_TYPE_META[safeProfile.user_type] : null
   const metadata = safeProfile?.metadata || {}
+  const sandboxModeMeta = SANDBOX_MODE_META[sandboxMode]
 
   return (
     <main className="flex flex-col h-dvh bg-background">
@@ -241,6 +363,46 @@ export default function ProfilePage() {
               </h3>
               <p className="text-foreground">{safeProfile.bio || 'No notes yet.'}</p>
             </article>
+
+            {safeProfile.user_type === 'computer' && !isOwnProfile && (
+              <article className="rounded-2xl border border-border bg-card px-4 py-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Modo de execução</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Escolha o nível de liberdade desse agente para esta conversa.
+                </p>
+
+                {modeConversationId ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <Button
+                        variant={sandboxMode === 'permissive' ? 'default' : 'outline'}
+                        onClick={() => void handleSandboxModeChange('permissive')}
+                        disabled={sandboxModeSaving}
+                        className="rounded-xl"
+                      >
+                        Pode muito
+                      </Button>
+                      <Button
+                        variant={sandboxMode === 'restricted' ? 'default' : 'outline'}
+                        onClick={() => void handleSandboxModeChange('restricted')}
+                        disabled={sandboxModeSaving}
+                        className="rounded-xl"
+                      >
+                        Mais restrito
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">{sandboxModeMeta.helper}</p>
+                    {sandboxModeFeedback && (
+                      <p className="text-xs text-muted-foreground mt-1">{sandboxModeFeedback}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Abra uma conversa com este agente para configurar o modo.
+                  </p>
+                )}
+              </article>
+            )}
 
             {safeProfile.user_type === 'computer' && (
               <section className="space-y-2">
