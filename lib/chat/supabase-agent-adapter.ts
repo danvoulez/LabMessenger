@@ -559,41 +559,61 @@ export class SupabaseAgentAdapter implements ChatProvider {
     userId: string,
     maxCommands: number = 10
   ): Promise<void> {
-    const { error: updateError } = await this.supabase
-      .from('messages')
-      .update({
-        task_data: {
-          max_commands: maxCommands,
-        },
-      })
-      .eq('task_id', taskId)
-      .eq('message_type', 'task_proposal')
-
-    if (updateError) throw updateError
-
-    const { error: insertError } = await this.supabase.from('messages').insert({
-      conversation_id: conversationId,
-      user_id: userId,
-      role: 'user',
-      content: `APPROVED:${taskId}:${maxCommands}`,
-      message_type: 'task_approval',
-      task_id: taskId,
-      status: 'sent',
+    const { data, error } = await this.supabase.rpc('approve_task', {
+      p_conversation_id: conversationId,
+      p_task_id: taskId,
+      p_max_commands: maxCommands,
     })
 
-    if (insertError) throw insertError
+    if (error) {
+      // Legacy fallback for environments without the new RPCs.
+      const { error: insertError } = await this.supabase.from('messages').insert({
+        conversation_id: conversationId,
+        user_id: userId,
+        role: 'user',
+        content: `APPROVED:${taskId}:${maxCommands}`,
+        message_type: 'task_approval',
+        task_id: taskId,
+        status: 'sent',
+      })
+      if (insertError) throw insertError
+      return
+    }
+
+    if (!data) {
+      throw new Error('approve_task RPC returned empty response')
+    }
   }
 
-  async rejectTask(conversationId: string, taskId: string, userId: string): Promise<void> {
-    const { error } = await this.supabase.from('messages').insert({
-      conversation_id: conversationId,
-      user_id: userId,
-      role: 'user',
-      content: `REJECTED:${taskId}`,
-      message_type: 'message',
-      status: 'sent',
+  async rejectTask(
+    conversationId: string,
+    taskId: string,
+    userId: string,
+    reason?: string
+  ): Promise<void> {
+    const { data, error } = await this.supabase.rpc('reject_task', {
+      p_conversation_id: conversationId,
+      p_task_id: taskId,
+      p_reason: reason || null,
     })
 
-    if (error) throw error
+    if (error) {
+      // Legacy fallback for environments without the new RPCs.
+      const { error: insertError } = await this.supabase.from('messages').insert({
+        conversation_id: conversationId,
+        user_id: userId,
+        role: 'user',
+        content: `REJECTED:${taskId}`,
+        message_type: 'task_approval',
+        task_id: taskId,
+        status: 'sent',
+      })
+      if (insertError) throw insertError
+      return
+    }
+
+    if (!data) {
+      throw new Error('reject_task RPC returned empty response')
+    }
   }
 }

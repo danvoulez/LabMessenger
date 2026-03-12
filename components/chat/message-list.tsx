@@ -133,13 +133,13 @@ export function MessageList({
                 <div
                   className={`relative max-w-[85%] px-3 py-2 rounded-2xl overflow-hidden ${
                     isOwn
-                      ? 'bg-primary text-primary-foreground rounded-br-md'
+                      ? 'bg-primary text-primary-foreground rounded-br-md dark:bg-zinc-700 dark:text-zinc-100'
                       : 'bg-card border border-border rounded-bl-md'
                   }`}
                 >
                   {isOwn && message.status === 'sending' && (
-                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary-foreground/20">
-                      <div className="h-full w-1/3 bg-primary-foreground/80 animate-progress" />
+                    <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary-foreground/20 dark:bg-zinc-300/25">
+                      <div className="h-full w-1/3 bg-primary-foreground/80 dark:bg-zinc-100/90 animate-progress" />
                     </div>
                   )}
 
@@ -172,7 +172,7 @@ export function MessageList({
                     </p>
                   )}
                   <div className={`flex items-center justify-end gap-1 mt-1 ${
-                    isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                    isOwn ? 'text-primary-foreground/70 dark:text-zinc-200/80' : 'text-muted-foreground'
                   }`}>
                     <span className="text-[10px]">
                       {formatTime(message.timestamp)}

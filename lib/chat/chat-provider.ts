@@ -41,6 +41,23 @@ export interface ChatProvider {
   }): Promise<Message>
 
   /**
+   * Aprova execução de tarefa proposta pelo agente.
+   * Opcional para adapters legados.
+   */
+  approveTask?(
+    conversationId: string,
+    taskId: string,
+    userId: string,
+    maxCommands?: number
+  ): Promise<void>
+
+  /**
+   * Rejeita execução de tarefa proposta pelo agente.
+   * Opcional para adapters legados.
+   */
+  rejectTask?(conversationId: string, taskId: string, userId: string, reason?: string): Promise<void>
+
+  /**
    * Busca mensagens de uma sala
    */
   getMessages(roomId: string): Promise<Message[]>

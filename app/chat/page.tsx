@@ -138,7 +138,9 @@ export default function ChatApp() {
 
   const handleOpenConversationProfile = useCallback(() => {
     if (!selectedConversation?.participantUserId) return
-    router.push(`/profile/${selectedConversation.participantUserId}`)
+    const params = new URLSearchParams()
+    params.set('conversationId', selectedConversation.id)
+    router.push(`/profile/${selectedConversation.participantUserId}?${params.toString()}`)
   }, [router, selectedConversation])
 
   const handleSelectConversation = useCallback((conversation: Conversation) => {
@@ -211,9 +213,13 @@ export default function ChatApp() {
     updateConversationFromMessage(sentMessage)
   }, [selectedConversationId, currentUserId, currentUsername, updateConversationFromMessage])
 
-  // Task approval — sends "APPROVED:<taskId>:<maxCommands>" as a message to the agent
+  // Task approval — prefer secure RPC, fallback to legacy approval message.
   const handleApproveTask = useCallback(async (taskId: string, maxCommands: number) => {
     if (!selectedConversationId || !currentUserId) return
+    if (chatProvider.approveTask) {
+      await chatProvider.approveTask(selectedConversationId, taskId, currentUserId, maxCommands)
+      return
+    }
     await chatProvider.sendMessage({
       content: `APPROVED:${taskId}:${maxCommands}`,
       userId: currentUserId,
@@ -222,9 +228,13 @@ export default function ChatApp() {
     })
   }, [selectedConversationId, currentUserId, currentUsername])
 
-  // Task rejection — sends "REJECTED:<taskId>" as a message to the agent
+  // Task rejection — prefer secure RPC, fallback to legacy rejection message.
   const handleRejectTask = useCallback(async (taskId: string) => {
     if (!selectedConversationId || !currentUserId) return
+    if (chatProvider.rejectTask) {
+      await chatProvider.rejectTask(selectedConversationId, taskId, currentUserId)
+      return
+    }
     await chatProvider.sendMessage({
       content: `REJECTED:${taskId}`,
       userId: currentUserId,
@@ -242,7 +252,7 @@ export default function ChatApp() {
   }
 
   const conversationPanel = (
-    <div className="flex flex-col h-full bg-primary text-primary-foreground">
+    <div className="flex flex-col h-full bg-zinc-900 text-zinc-100">
       <AppHeader
         title="Conversas"
         onLogout={handleLogout}
@@ -254,7 +264,7 @@ export default function ChatApp() {
       />
       <div className="safe-bottom flex-1 overflow-y-auto">
         {conversationsLoading ? (
-          <div className="flex items-center justify-center h-full text-primary-foreground/70">
+          <div className="flex items-center justify-center h-full text-white/70">
             Carregando conversas...
           </div>
         ) : (
@@ -296,7 +306,7 @@ export default function ChatApp() {
 
   return (
     <main className="h-dvh bg-background md:grid md:grid-cols-[340px_1fr]">
-      <section className={`${selectedConversation ? 'hidden md:block' : 'block'} h-full border-r border-primary-foreground/10`}>
+      <section className={`${selectedConversation ? 'hidden md:block' : 'block'} h-full border-r border-border`}>
         {conversationPanel}
       </section>
       <section className={`${selectedConversation ? 'block' : 'hidden md:block'} h-full`}>
