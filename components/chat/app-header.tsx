@@ -1,6 +1,6 @@
 'use client'
 
-import { MoreVertical, LogOut, User, ListTodo, AlertTriangle, LoaderCircle, Wifi, WifiOff } from 'lucide-react'
+import { MoreVertical, LogOut, User, ListTodo, AlertTriangle, LoaderCircle, Wifi, WifiOff, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ConnectionStatus } from '@/lib/chat'
@@ -19,6 +19,8 @@ interface AppHeaderProps {
   onOpenProfile?: () => void
   onOpenTasks?: () => void
   connectionStatus?: ConnectionStatus
+  onToggleTheme?: () => void
+  isDarkMode?: boolean
   theme?: 'light' | 'dark'
 }
 
@@ -32,7 +34,7 @@ function ConnectionBadge({ status = 'disconnected', theme = 'light' }: { status?
           : 'border-border text-muted-foreground bg-muted/70'
       )}>
         <LoaderCircle className="h-3 w-3 animate-spin" />
-        Conectando
+        Conectando chat
       </span>
     )
   }
@@ -45,7 +47,7 @@ function ConnectionBadge({ status = 'disconnected', theme = 'light' }: { status?
           : 'border-emerald-500/30 text-emerald-700 bg-emerald-500/10'
       )}>
         <Wifi className="h-3 w-3" />
-        Online
+        Canal OK
       </span>
     )
   }
@@ -58,7 +60,7 @@ function ConnectionBadge({ status = 'disconnected', theme = 'light' }: { status?
           : 'border-rose-500/30 text-rose-700 bg-rose-500/10'
       )}>
         <AlertTriangle className="h-3 w-3" />
-        Erro
+        Falha de conexão
       </span>
     )
   }
@@ -68,9 +70,9 @@ function ConnectionBadge({ status = 'disconnected', theme = 'light' }: { status?
       theme === 'dark'
         ? 'border-white/20 text-white/80 bg-white/5'
         : 'border-border text-muted-foreground bg-muted/70'
-    )}>
-      <WifiOff className="h-3 w-3" />
-      Offline
+      )}>
+        <WifiOff className="h-3 w-3" />
+      Sem conexão
     </span>
   )
 }
@@ -82,6 +84,8 @@ export function AppHeader({
   onOpenProfile,
   onOpenTasks,
   connectionStatus,
+  onToggleTheme,
+  isDarkMode = false,
   theme = 'light',
 }: AppHeaderProps) {
   const isDark = theme === 'dark'
@@ -129,16 +133,22 @@ export function AppHeader({
           {onOpenProfile && (
             <DropdownMenuItem onClick={onOpenProfile} className="flex items-center gap-2">
               <User className="h-4 w-4" />
-              <span>Profile</span>
+              <span>Perfil</span>
             </DropdownMenuItem>
           )}
           {onOpenTasks && (
             <DropdownMenuItem onClick={onOpenTasks} className="flex items-center gap-2">
               <ListTodo className="h-4 w-4" />
-              <span>Tasks</span>
+              <span>Tarefas</span>
             </DropdownMenuItem>
           )}
-          {(onOpenProfile || onOpenTasks) && onLogout && <DropdownMenuSeparator />}
+          {onToggleTheme && (
+            <DropdownMenuItem onClick={onToggleTheme} className="flex items-center gap-2">
+              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <span>{isDarkMode ? 'Modo claro' : 'Modo escuro'}</span>
+            </DropdownMenuItem>
+          )}
+          {(onOpenProfile || onOpenTasks || onToggleTheme) && onLogout && <DropdownMenuSeparator />}
           {onLogout && (
             <DropdownMenuItem
               onClick={onLogout}

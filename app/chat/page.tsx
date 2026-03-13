@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import {
   AppHeader,
   ConversationList,
@@ -12,6 +13,7 @@ import {
 import type { Conversation, Message } from '@/lib/chat/types'
 import { chatProvider, type ConnectionStatus } from '@/lib/chat'
 import { useAuth } from '@/hooks/use-auth'
+import { cn } from '@/lib/utils'
 
 function toConversationPreview(message: Message): string {
   if (message.attachments && message.attachments.length > 0) {
@@ -25,6 +27,7 @@ function toConversationPreview(message: Message): string {
 
 export default function ChatApp() {
   const router = useRouter()
+  const { resolvedTheme, setTheme } = useTheme()
   const { user, isLoading, isAuthenticated, signOut } = useAuth()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
@@ -32,6 +35,7 @@ export default function ChatApp() {
   const [conversationsLoading, setConversationsLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
+  const [themeMounted, setThemeMounted] = useState(false)
 
   const currentUserId = user?.id ?? ''
   const currentUsername = user?.username || user?.email?.split('@')[0] || 'Você'
@@ -39,6 +43,8 @@ export default function ChatApp() {
     () => conversations.find((conversation) => conversation.id === selectedConversationId) || null,
     [conversations, selectedConversationId]
   )
+  const isDarkMode = (resolvedTheme ?? 'light') === 'dark'
+  const activeTheme = isDarkMode ? 'dark' : 'light'
 
   const updateConversationFromMessage = useCallback((message: Message) => {
     setConversations((prev) => {
@@ -68,6 +74,10 @@ export default function ChatApp() {
     const unsubscribe = chatProvider.onConnectionChange(setConnectionStatus)
     return unsubscribe
   }, [isAuthenticated])
+
+  useEffect(() => {
+    setThemeMounted(true)
+  }, [])
 
   // Load conversations from Supabase
   useEffect(() => {
@@ -135,6 +145,10 @@ export default function ChatApp() {
     if (!currentUserId) return
     router.push(`/profile/${currentUserId}`)
   }, [router, currentUserId])
+
+  const handleToggleTheme = useCallback(() => {
+    setTheme(isDarkMode ? 'light' : 'dark')
+  }, [isDarkMode, setTheme])
 
   const handleOpenConversationProfile = useCallback(() => {
     if (!selectedConversation?.participantUserId) return
@@ -252,7 +266,10 @@ export default function ChatApp() {
   }
 
   const conversationPanel = (
-    <div className="flex flex-col h-full bg-zinc-900 text-zinc-100">
+    <div className={cn(
+      'flex flex-col h-full',
+      activeTheme === 'dark' ? 'bg-zinc-900 text-zinc-100' : 'bg-card text-foreground'
+    )}>
       <AppHeader
         title="Conversas"
         onLogout={handleLogout}
@@ -260,11 +277,16 @@ export default function ChatApp() {
         onOpenProfile={handleOpenProfile}
         onOpenTasks={handleOpenTasks}
         connectionStatus={connectionStatus}
-        theme="dark"
+        onToggleTheme={themeMounted ? handleToggleTheme : undefined}
+        isDarkMode={isDarkMode}
+        theme={activeTheme}
       />
       <div className="safe-bottom flex-1 overflow-y-auto">
         {conversationsLoading ? (
-          <div className="flex items-center justify-center h-full text-white/70">
+          <div className={cn(
+            'flex items-center justify-center h-full',
+            activeTheme === 'dark' ? 'text-white/70' : 'text-muted-foreground'
+          )}>
             Carregando conversas...
           </div>
         ) : (
@@ -272,7 +294,7 @@ export default function ChatApp() {
             conversations={conversations}
             onSelectConversation={handleSelectConversation}
             selectedId={selectedConversationId ?? undefined}
-            theme="dark"
+            theme={activeTheme}
           />
         )}
       </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { ChevronLeft, LoaderCircle, MoreVertical, Phone, Video, Wifi, WifiOff } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -23,32 +24,41 @@ function getInitials(name: string): string {
     .slice(0, 2)
 }
 
-function ConnectionMini({ status = 'disconnected' }: { status?: ConnectionStatus }) {
-  if (status === 'connecting') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-        <LoaderCircle className="h-3 w-3 animate-spin" />
-        conectando
-      </span>
-    )
+function getAvailability(
+  isAgentOnline: boolean,
+  connectionStatus: ConnectionStatus = 'disconnected'
+): { label: string; toneClass: string; icon: ReactNode } {
+  if (connectionStatus === 'connecting') {
+    return {
+      label: 'Reconectando chat...',
+      toneClass: 'text-amber-700 dark:text-amber-300',
+      icon: <LoaderCircle className="h-3 w-3 animate-spin" />,
+    }
   }
-  if (status === 'connected') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
-        <Wifi className="h-3 w-3" />
-        conectado
-      </span>
-    )
+  if (connectionStatus === 'error' || connectionStatus === 'disconnected') {
+    return {
+      label: 'Sem conexão com mensagens',
+      toneClass: 'text-rose-700 dark:text-rose-300',
+      icon: <WifiOff className="h-3 w-3" />,
+    }
   }
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-rose-500">
-      <WifiOff className="h-3 w-3" />
-      sem conexão
-    </span>
-  )
+  if (isAgentOnline) {
+    return {
+      label: 'Conectado: responde agora',
+      toneClass: 'text-emerald-700 dark:text-emerald-300',
+      icon: <Wifi className="h-3 w-3" />,
+    }
+  }
+  return {
+    label: 'Indisponível agora',
+    toneClass: 'text-rose-600 dark:text-rose-300',
+    icon: <WifiOff className="h-3 w-3" />,
+  }
 }
 
 export function ChatHeader({ conversation, onBack, onOpenProfile, connectionStatus }: ChatHeaderProps) {
+  const availability = getAvailability(conversation.isOnline ?? false, connectionStatus)
+
   return (
     <header className="safe-top safe-x sticky top-0 z-10 flex items-center gap-2 px-2 py-2 bg-card border-b border-border">
       <Button
@@ -68,35 +78,21 @@ export function ChatHeader({ conversation, onBack, onOpenProfile, connectionStat
         disabled={!onOpenProfile}
         aria-label="Abrir perfil do contato"
       >
-        <div className="relative shrink-0">
-          <Avatar className="h-10 w-10">
+        <div className="shrink-0">
+          <Avatar className="h-10 w-10 border border-border/60">
             <AvatarFallback className="bg-muted text-muted-foreground text-sm font-medium">
               {getInitials(conversation.name)}
             </AvatarFallback>
           </Avatar>
-          <span
-            className={cn(
-              'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card shadow-[0_0_10px_currentColor]',
-              conversation.isOnline
-                ? 'bg-emerald-400 text-emerald-400 signal-online'
-                : 'bg-rose-400 text-rose-400 signal-offline'
-            )}
-          />
         </div>
 
         <div className="min-w-0">
           <h1 className="font-semibold text-foreground truncate leading-tight">
             {conversation.name}
           </h1>
-          <div className="flex items-center gap-2">
-            <p className={cn(
-              'text-xs',
-              conversation.isOnline ? 'text-emerald-600' : 'text-rose-500'
-            )}>
-              {conversation.isOnline ? 'Online' : 'Offline'}
-            </p>
-            <span className="text-muted-foreground/60">•</span>
-            <ConnectionMini status={connectionStatus} />
+          <div className={cn('inline-flex items-center gap-1.5 text-xs', availability.toneClass)}>
+            {availability.icon}
+            <span>{availability.label}</span>
           </div>
         </div>
       </button>

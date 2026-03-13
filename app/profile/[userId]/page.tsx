@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Phone, Video } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, MessageCircle, Phone, RefreshCw, Video } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
@@ -39,15 +39,23 @@ interface ConversationSettingsRow {
 }
 
 const PROFILE_TYPE_META: Record<UserType, { label: string; toneClass: string }> = {
-  human: { label: 'Human', toneClass: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-  llm: { label: 'LLM', toneClass: 'text-amber-700 bg-amber-50 border-amber-200' },
-  computer: { label: 'Computer', toneClass: 'text-sky-700 bg-sky-50 border-sky-200' },
+  human: { label: 'Pessoa', toneClass: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  llm: { label: 'Modelo de IA', toneClass: 'text-amber-700 bg-amber-50 border-amber-200' },
+  computer: { label: 'Agente de computador', toneClass: 'text-sky-700 bg-sky-50 border-sky-200' },
 }
 
 const SERVICE_STATUS_META: Record<ServiceStatus, { label: string; dotClass: string }> = {
-  healthy: { label: 'Healthy', dotClass: 'bg-emerald-500' },
-  warning: { label: 'Warning', dotClass: 'bg-amber-500' },
-  critical: { label: 'Critical', dotClass: 'bg-rose-500' },
+  healthy: { label: 'Conectado', dotClass: 'bg-emerald-500' },
+  warning: { label: 'Instável', dotClass: 'bg-amber-500' },
+  critical: { label: 'Offline', dotClass: 'bg-rose-500' },
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  'agent-server': 'Agente residente',
+  'supabase-realtime': 'Canal de mensagens',
+  'mcp-client': 'Ferramentas MCP',
+  'sandbox-runner': 'Sandbox de execução',
+  'sandbox-runtime': 'Sandbox de execução',
 }
 
 const SANDBOX_MODE_META: Record<SandboxMode, { label: string; helper: string }> = {
@@ -79,6 +87,15 @@ function formatUpdatedAt(timestamp: string): string {
   })
 }
 
+function formatServiceName(serviceName: string): string {
+  if (SERVICE_LABELS[serviceName]) return SERVICE_LABELS[serviceName]
+  return serviceName
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 function formatDetailValue(value: unknown): string {
   if (value === null || value === undefined) return '-'
   if (typeof value === 'string') return value
@@ -107,6 +124,8 @@ export default function ProfilePage() {
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>('restricted')
   const [sandboxModeSaving, setSandboxModeSaving] = useState(false)
   const [sandboxModeFeedback, setSandboxModeFeedback] = useState<string | null>(null)
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
+  const [recoveryFeedback, setRecoveryFeedback] = useState<string | null>(null)
 
   const targetUserId = useMemo(() => {
     if (!params?.userId) return ''
@@ -141,6 +160,7 @@ export default function ProfilePage() {
     const loadProfile = async () => {
       setLoadingProfile(true)
       setSandboxModeFeedback(null)
+      setRecoveryFeedback(null)
 
       const { data: profileRow } = await supabase
         .from('user_profiles')
@@ -229,6 +249,7 @@ export default function ProfilePage() {
       setConversationMetadata({})
       setSandboxMode('restricted')
       setSandboxModeFeedback('Não foi possível carregar as configurações deste contato.')
+      setRecoveryFeedback(null)
       setLoadingProfile(false)
     })
   }, [requestedConversationId, supabase, targetUserId, user?.id])
@@ -267,6 +288,53 @@ export default function ProfilePage() {
     setSandboxModeSaving(false)
   }, [conversationMetadata, modeConversationId, sandboxMode, sandboxModeSaving, supabase, targetUserId, user?.id])
 
+  const handleAttemptRecovery = useCallback(async () => {
+    if (!user?.id || !targetUserId || !modeConversationId || recoveryLoading) return
+
+    setRecoveryLoading(true)
+    setRecoveryFeedback(null)
+
+    const requestedAt = new Date().toISOString()
+    const requestId = crypto.randomUUID()
+    const nextMetadata: Record<string, unknown> = {
+      ...conversationMetadata,
+      wakeup_request: {
+        request_id: requestId,
+        requested_at: requestedAt,
+        requested_by: user.id,
+      },
+    }
+
+    const [conversationUpdate, messageInsert] = await Promise.all([
+      supabase
+        .from('conversations')
+        .update({ metadata: nextMetadata })
+        .eq('id', modeConversationId)
+        .eq('user_id', user.id)
+        .eq('agent_user_id', targetUserId),
+      supabase
+        .from('messages')
+        .insert({
+          conversation_id: modeConversationId,
+          user_id: user.id,
+          role: 'user',
+          message_type: 'message',
+          status: 'sent',
+          content: '🩺 Pedido automático: tente recuperar sua conexão, valide ferramentas MCP e responda com diagnóstico curto.',
+        }),
+    ])
+
+    if (conversationUpdate.error || messageInsert.error) {
+      setRecoveryFeedback('Não foi possível enviar a tentativa de recuperação agora.')
+      setRecoveryLoading(false)
+      return
+    }
+
+    setConversationMetadata(nextMetadata)
+    setRecoveryFeedback('Tentativa enviada. Quando reconectar, o agente deve responder com status.')
+    setRecoveryLoading(false)
+  }, [conversationMetadata, modeConversationId, recoveryLoading, supabase, targetUserId, user?.id])
+
   if (isLoading) {
     return (
       <main className="flex items-center justify-center h-dvh bg-background">
@@ -288,10 +356,10 @@ export default function ProfilePage() {
           >
             <ChevronLeft className="h-6 w-6" />
           </Button>
-          <h1 className="text-xl font-semibold text-foreground">Contact info</h1>
+          <h1 className="text-xl font-semibold text-foreground">Perfil do contato</h1>
         </header>
         <section className="flex-1 flex items-center justify-center px-6 text-center text-muted-foreground">
-          Profile not found or access denied.
+          Perfil não encontrado ou sem acesso.
         </section>
       </main>
     )
@@ -301,6 +369,10 @@ export default function ProfilePage() {
   const typeMeta = safeProfile ? PROFILE_TYPE_META[safeProfile.user_type] : null
   const metadata = safeProfile?.metadata || {}
   const sandboxModeMeta = SANDBOX_MODE_META[sandboxMode]
+  const agentServerService = services.find((service) => service.service_name === 'agent-server')
+  const hasServiceIssues = services.length === 0 || services.some((service) => service.status !== 'healthy')
+  const showRecoveryAction =
+    safeProfile?.user_type === 'computer' && !isOwnProfile && !!modeConversationId && hasServiceIssues
 
   return (
     <main className="flex flex-col h-dvh bg-background">
@@ -314,7 +386,7 @@ export default function ProfilePage() {
         >
           <ChevronLeft className="h-6 w-6" />
         </Button>
-        <h1 className="text-2xl font-semibold text-foreground">Contact info</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Perfil do contato</h1>
         <div className="w-10" />
       </header>
 
@@ -336,6 +408,17 @@ export default function ProfilePage() {
                   {typeMeta.label}
                 </span>
               )}
+              {safeProfile.user_type === 'computer' && (
+                <span className={`text-xs border rounded-full px-3 py-1 ${
+                  agentServerService?.status === 'healthy'
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : 'text-rose-700 bg-rose-50 border-rose-200'
+                }`}>
+                  {agentServerService?.status === 'healthy'
+                    ? 'Conectado: vai responder'
+                    : 'Pode não responder agora'}
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -345,23 +428,23 @@ export default function ProfilePage() {
                 onClick={() => router.push('/chat')}
               >
                 <MessageCircle className="h-6 w-6" />
-                Message
+                Mensagem
               </Button>
               <Button variant="outline" className="h-24 flex-col gap-2 rounded-2xl text-lg" disabled>
                 <Phone className="h-6 w-6" />
-                Audio
+                Áudio
               </Button>
               <Button variant="outline" className="h-24 flex-col gap-2 rounded-2xl text-lg" disabled>
                 <Video className="h-6 w-6" />
-                Video
+                Vídeo
               </Button>
             </div>
 
             <article className="rounded-2xl border border-border bg-card px-4 py-4">
               <h3 className="text-sm font-medium text-muted-foreground mb-1">
-                {isOwnProfile ? 'Your notes' : 'Notes'}
+                {isOwnProfile ? 'Suas anotações' : 'Anotações'}
               </h3>
-              <p className="text-foreground">{safeProfile.bio || 'No notes yet.'}</p>
+              <p className="text-foreground">{safeProfile.bio || 'Sem anotações por enquanto.'}</p>
             </article>
 
             {safeProfile.user_type === 'computer' && !isOwnProfile && (
@@ -395,6 +478,34 @@ export default function ProfilePage() {
                     {sandboxModeFeedback && (
                       <p className="text-xs text-muted-foreground mt-1">{sandboxModeFeedback}</p>
                     )}
+                    {showRecoveryAction && (
+                      <div className="mt-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => void handleAttemptRecovery()}
+                          disabled={recoveryLoading}
+                          className="rounded-xl w-full sm:w-auto"
+                        >
+                          {recoveryLoading ? (
+                            <>
+                              <LoaderCircle className="h-4 w-4 mr-2 animate-spin" />
+                              Tentando resolver...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Tentar resolver
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Envia um pedido seguro para o agente se recuperar e confirmar o que voltou.
+                        </p>
+                      </div>
+                    )}
+                    {recoveryFeedback && (
+                      <p className="text-xs text-muted-foreground mt-2">{recoveryFeedback}</p>
+                    )}
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground mt-2">
@@ -407,11 +518,11 @@ export default function ProfilePage() {
             {safeProfile.user_type === 'computer' && (
               <section className="space-y-2">
                 <h3 className="text-sm font-medium text-muted-foreground px-1">
-                  Observability services
+                  Sinais de operação
                 </h3>
                 {services.length === 0 ? (
                   <article className="rounded-2xl border border-border bg-card px-4 py-4 text-sm text-muted-foreground">
-                    No service checks yet.
+                    Sem sinais técnicos ainda.
                   </article>
                 ) : (
                   services.map((service) => {
@@ -428,11 +539,11 @@ export default function ProfilePage() {
                           <span className={`mt-1.5 h-2.5 w-2.5 rounded-full ${statusMeta.dotClass}`} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="font-medium text-foreground truncate">{service.service_name}</p>
+                              <p className="font-medium text-foreground truncate">{formatServiceName(service.service_name)}</p>
                               <span className="text-xs text-muted-foreground">{statusMeta.label}</span>
                             </div>
                             <p className="text-xs text-muted-foreground truncate mt-0.5">
-                              Updated {formatUpdatedAt(service.updated_at)}
+                              Atualizado em {formatUpdatedAt(service.updated_at)}
                             </p>
                           </div>
                           {isOpen ? (
@@ -443,7 +554,7 @@ export default function ProfilePage() {
                         </button>
                         {isOpen && (
                           <div className="px-4 pb-4 pt-1 border-t border-border space-y-3">
-                            <p className="text-sm text-foreground">{service.summary || 'No summary provided.'}</p>
+                            <p className="text-sm text-foreground">{service.summary || 'Sem resumo disponível.'}</p>
                             {detailsEntries.length > 0 && (
                               <div className="grid grid-cols-1 gap-1">
                                 {detailsEntries.map(([key, value]) => (
@@ -465,13 +576,13 @@ export default function ProfilePage() {
 
             {safeProfile.user_type === 'llm' && (
               <article className="rounded-2xl border border-border bg-card px-4 py-4 space-y-2">
-                <h3 className="text-sm font-medium text-muted-foreground">LLM profile</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">Perfil do modelo</h3>
                 <p className="text-sm">
-                  <span className="text-muted-foreground">Model:</span>{' '}
+                  <span className="text-muted-foreground">Modelo:</span>{' '}
                   <span className="text-foreground">{formatDetailValue(metadata.model)}</span>
                 </p>
                 <p className="text-sm">
-                  <span className="text-muted-foreground">Provider:</span>{' '}
+                  <span className="text-muted-foreground">Provedor:</span>{' '}
                   <span className="text-foreground">{formatDetailValue(metadata.provider)}</span>
                 </p>
               </article>
@@ -479,9 +590,9 @@ export default function ProfilePage() {
 
             {safeProfile.user_type === 'human' && (
               <article className="rounded-2xl border border-border bg-card px-4 py-4 space-y-2">
-                <h3 className="text-sm font-medium text-muted-foreground">Human profile</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">Perfil da pessoa</h3>
                 <p className="text-sm">
-                  <span className="text-muted-foreground">Joined:</span>{' '}
+                  <span className="text-muted-foreground">Entrou em:</span>{' '}
                   <span className="text-foreground">{formatUpdatedAt(safeProfile.created_at)}</span>
                 </p>
               </article>

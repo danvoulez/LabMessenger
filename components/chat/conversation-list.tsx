@@ -55,21 +55,21 @@ export function ConversationList({
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col px-2 py-2">
       {conversations.map((conversation) => (
         <button
           key={conversation.id}
           onClick={() => onSelectConversation(conversation)}
           className={cn(
-            'flex items-center gap-3 px-4 py-3 transition-all duration-200 text-left',
+            'flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all duration-200 text-left',
             isDark
-              ? 'hover:bg-white/10 active:bg-white/15 border-b border-white/10'
+              ? 'hover:bg-white/10 active:bg-white/15'
               : 'hover:bg-accent active:bg-accent/80',
             selectedId === conversation.id && (isDark ? 'bg-white/15' : 'bg-accent')
           )}
         >
-          <div className="relative shrink-0">
-            <Avatar className="h-12 w-12">
+          <div className="shrink-0">
+            <Avatar className="h-12 w-12 border border-border/50">
               <AvatarFallback className={cn(
                 'text-sm font-medium',
                 isDark ? 'bg-white/12 text-white' : 'bg-muted text-muted-foreground'
@@ -77,18 +77,9 @@ export function ConversationList({
                 {getInitials(conversation.name)}
               </AvatarFallback>
             </Avatar>
-            <span
-              className={cn(
-                'absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 shadow-[0_0_10px_currentColor] transition-colors',
-                isDark ? 'border-zinc-900' : 'border-card',
-                conversation.isOnline
-                  ? 'bg-emerald-400 text-emerald-400 signal-online'
-                  : 'bg-rose-400 text-rose-400 signal-offline'
-              )}
-            />
           </div>
           
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 pr-1">
             <div className="flex items-center justify-between gap-2">
               <span className={cn('font-medium truncate', isDark ? 'text-white' : 'text-foreground')}>
                 {conversation.name}
@@ -110,15 +101,15 @@ export function ConversationList({
                 </span>
               )}
             </div>
-            <div className="mt-1">
+            <div className="mt-1.5">
               <span className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] border',
+                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] border',
                 conversation.isOnline
                   ? (isDark ? 'text-emerald-300 border-emerald-400/40 bg-emerald-500/10' : 'text-emerald-700 border-emerald-500/30 bg-emerald-500/10')
                   : (isDark ? 'text-rose-300 border-rose-400/40 bg-rose-500/10' : 'text-rose-700 border-rose-500/30 bg-rose-500/10')
               )}>
                 <span className={cn('h-1.5 w-1.5 rounded-full', conversation.isOnline ? 'bg-emerald-400' : 'bg-rose-400')} />
-                {conversation.isOnline ? 'Online' : 'Offline'}
+                {conversation.isOnline ? 'Pronto para responder' : 'Indisponível agora'}
               </span>
             </div>
           </div>
