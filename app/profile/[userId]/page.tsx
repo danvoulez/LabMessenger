@@ -38,6 +38,14 @@ interface ConversationSettingsRow {
   metadata: Record<string, unknown> | null
 }
 
+interface RecoveryLogEntry {
+  id: string
+  level: 'info' | 'success' | 'warning' | 'error'
+  message: string
+  detail?: string
+  at: string
+}
+
 const PROFILE_TYPE_META: Record<UserType, { label: string; toneClass: string }> = {
   human: { label: 'Pessoa', toneClass: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
   llm: { label: 'Modelo de IA', toneClass: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -108,6 +116,20 @@ function parseSandboxMode(metadata: Record<string, unknown> | null | undefined):
   return 'restricted'
 }
 
+function parseRoleFlags(metadata: Record<string, unknown> | null | undefined): {
+  canRequestAdvancedRecovery: boolean
+} {
+  const role = typeof metadata?.role === 'string' ? metadata.role.toLowerCase() : ''
+  const roles = Array.isArray(metadata?.roles) ? metadata?.roles : []
+  const hasRecoveryRole = roles.some(
+    (value) => typeof value === 'string' && ['admin', 'ops', 'agent_admin', 'support'].includes(value.toLowerCase())
+  )
+
+  return {
+    canRequestAdvancedRecovery: hasRecoveryRole || ['admin', 'ops', 'owner'].includes(role),
+  }
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const params = useParams<{ userId: string }>()
@@ -126,6 +148,7 @@ export default function ProfilePage() {
   const [sandboxModeFeedback, setSandboxModeFeedback] = useState<string | null>(null)
   const [recoveryLoading, setRecoveryLoading] = useState(false)
   const [recoveryFeedback, setRecoveryFeedback] = useState<string | null>(null)
+  const [recoveryLogs, setRecoveryLogs] = useState<RecoveryLogEntry[]>([])
 
   const targetUserId = useMemo(() => {
     if (!params?.userId) return ''
@@ -138,6 +161,7 @@ export default function ProfilePage() {
   }, [searchParams])
 
   const isOwnProfile = !!user?.id && user.id === targetUserId
+  const roleFlags = useMemo(() => parseRoleFlags(user?.metadata), [user?.metadata])
 
   const toggleExpandedService = useCallback((serviceId: string) => {
     setExpandedServices((prev) => {
@@ -161,6 +185,7 @@ export default function ProfilePage() {
       setLoadingProfile(true)
       setSandboxModeFeedback(null)
       setRecoveryFeedback(null)
+      setRecoveryLogs([])
 
       const { data: profileRow } = await supabase
         .from('user_profiles')
@@ -250,6 +275,7 @@ export default function ProfilePage() {
       setSandboxMode('restricted')
       setSandboxModeFeedback('Não foi possível carregar as configurações deste contato.')
       setRecoveryFeedback(null)
+      setRecoveryLogs([])
       setLoadingProfile(false)
     })
   }, [requestedConversationId, supabase, targetUserId, user?.id])
@@ -288,11 +314,29 @@ export default function ProfilePage() {
     setSandboxModeSaving(false)
   }, [conversationMetadata, modeConversationId, sandboxMode, sandboxModeSaving, supabase, targetUserId, user?.id])
 
+  const appendRecoveryLog = useCallback(
+    (level: RecoveryLogEntry['level'], message: string, detail?: string) => {
+      setRecoveryLogs((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          level,
+          message,
+          detail,
+          at: new Date().toISOString(),
+        },
+      ])
+    },
+    []
+  )
+
   const handleAttemptRecovery = useCallback(async () => {
     if (!user?.id || !targetUserId || !modeConversationId || recoveryLoading) return
 
     setRecoveryLoading(true)
     setRecoveryFeedback(null)
+    setRecoveryLogs([])
+    appendRecoveryLog('info', 'Iniciando tentativa de recuperação.')
 
     const requestedAt = new Date().toISOString()
     const requestId = crypto.randomUUID()
@@ -305,35 +349,102 @@ export default function ProfilePage() {
       },
     }
 
-    const [conversationUpdate, messageInsert] = await Promise.all([
-      supabase
-        .from('conversations')
-        .update({ metadata: nextMetadata })
-        .eq('id', modeConversationId)
-        .eq('user_id', user.id)
-        .eq('agent_user_id', targetUserId),
-      supabase
-        .from('messages')
-        .insert({
-          conversation_id: modeConversationId,
-          user_id: user.id,
-          role: 'user',
-          message_type: 'message',
-          status: 'sent',
-          content: '🩺 Pedido automático: tente recuperar sua conexão, valide ferramentas MCP e responda com diagnóstico curto.',
-        }),
-    ])
+    const conversationUpdate = await supabase
+      .from('conversations')
+      .update({ metadata: nextMetadata })
+      .eq('id', modeConversationId)
+      .eq('user_id', user.id)
+      .eq('agent_user_id', targetUserId)
 
-    if (conversationUpdate.error || messageInsert.error) {
-      setRecoveryFeedback('Não foi possível enviar a tentativa de recuperação agora.')
+    if (conversationUpdate.error) {
+      appendRecoveryLog('error', 'Falha ao registrar pedido de wake-up na conversa.', conversationUpdate.error.message)
+      setRecoveryFeedback('A tentativa falhou antes de enviar o pedido ao agente.')
       setRecoveryLoading(false)
       return
     }
 
     setConversationMetadata(nextMetadata)
-    setRecoveryFeedback('Tentativa enviada. Quando reconectar, o agente deve responder com status.')
+    appendRecoveryLog('success', 'Pedido de wake-up registrado na conversa.')
+
+    const messageInsert = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: modeConversationId,
+        user_id: user.id,
+        role: 'user',
+        message_type: 'message',
+        status: 'sent',
+        content: '🩺 Pedido automático: tente recuperar sua conexão, valide ferramentas MCP e responda com diagnóstico curto.',
+      })
+
+    if (messageInsert.error) {
+      appendRecoveryLog('error', 'Falha ao enviar mensagem de recuperação ao agente.', messageInsert.error.message)
+      setRecoveryFeedback('Pedido registrado, mas a mensagem não foi enviada.')
+      setRecoveryLoading(false)
+      return
+    }
+
+    appendRecoveryLog('success', 'Mensagem de recuperação enviada para o canal.')
+
+    if (roleFlags.canRequestAdvancedRecovery) {
+      appendRecoveryLog('info', 'Tentando ação avançada com RPC (se habilitada por RLS).')
+      const { error: advancedError } = await supabase.rpc('request_agent_recovery', {
+        p_conversation_id: modeConversationId,
+        p_target_user_id: targetUserId,
+        p_request_id: requestId,
+      })
+      if (advancedError) {
+        appendRecoveryLog(
+          'warning',
+          'Ação avançada indisponível ou sem permissão.',
+          advancedError.message
+        )
+      } else {
+        appendRecoveryLog('success', 'Ação avançada de recuperação enviada com sucesso.')
+      }
+    } else {
+      appendRecoveryLog(
+        'info',
+        'Conta sem papel de recuperação avançada.',
+        'Peça um papel com acesso de operações para enviar ações remotas mais fortes.'
+      )
+    }
+
+    const { data: freshServices, error: freshServicesError } = await supabase
+      .from('user_observability_services')
+      .select('service_name, status, updated_at')
+      .eq('user_id', targetUserId)
+
+    if (freshServicesError) {
+      appendRecoveryLog('warning', 'Não foi possível confirmar o estado dos serviços após o pedido.', freshServicesError.message)
+      setRecoveryFeedback('Pedido enviado. Acompanhe a resposta do agente na conversa.')
+      setRecoveryLoading(false)
+      return
+    }
+
+    const stillDown = (freshServices || [])
+      .filter((service: { service_name: string; status: ServiceStatus }) => service.status !== 'healthy')
+      .map((service: { service_name: string }) => formatServiceName(service.service_name))
+
+    if (stillDown.length > 0) {
+      appendRecoveryLog('warning', 'Serviços ainda instáveis/offline após a tentativa.', stillDown.join(', '))
+      setRecoveryFeedback(`Pedido enviado. Se não voltar em 1-2 min, verifique: ${stillDown.join(', ')}.`)
+    } else {
+      appendRecoveryLog('success', 'Todos os serviços reportaram saudável após a tentativa.')
+      setRecoveryFeedback('Recuperação disparada com sucesso. O agente deve responder em breve.')
+    }
+
     setRecoveryLoading(false)
-  }, [conversationMetadata, modeConversationId, recoveryLoading, supabase, targetUserId, user?.id])
+  }, [
+    appendRecoveryLog,
+    conversationMetadata,
+    modeConversationId,
+    recoveryLoading,
+    roleFlags.canRequestAdvancedRecovery,
+    supabase,
+    targetUserId,
+    user?.id,
+  ])
 
   if (isLoading) {
     return (
@@ -505,6 +616,36 @@ export default function ProfilePage() {
                     )}
                     {recoveryFeedback && (
                       <p className="text-xs text-muted-foreground mt-2">{recoveryFeedback}</p>
+                    )}
+                    {recoveryLogs.length > 0 && (
+                      <div className="mt-3 rounded-xl border border-border bg-muted/40 px-3 py-3 space-y-2">
+                        <p className="text-xs font-medium text-foreground">
+                          Log da tentativa
+                        </p>
+                        {recoveryLogs.map((entry) => (
+                          <div key={entry.id} className="text-xs">
+                            <p className={
+                              entry.level === 'success'
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : entry.level === 'warning'
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : entry.level === 'error'
+                                    ? 'text-rose-700 dark:text-rose-300'
+                                    : 'text-muted-foreground'
+                            }>
+                              {entry.message}
+                            </p>
+                            {entry.detail && (
+                              <p className="text-muted-foreground/90">{entry.detail}</p>
+                            )}
+                          </div>
+                        ))}
+                        <p className="text-[11px] text-muted-foreground">
+                          {roleFlags.canRequestAdvancedRecovery
+                            ? 'Ações avançadas tentadas conforme papel de acesso.'
+                            : 'Para ações remotas mais fortes, habilite um papel de operações no seu usuário.'}
+                        </p>
+                      </div>
                     )}
                   </>
                 ) : (

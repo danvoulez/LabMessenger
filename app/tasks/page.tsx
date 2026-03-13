@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronDown, ChevronRight } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronLeft, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { createClient } from '@/utils/supabase/client'
@@ -96,7 +96,13 @@ export default function TasksPage() {
   const supabase = useMemo(() => createClient(), [])
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [archivedTaskKeys, setArchivedTaskKeys] = useState<Set<string>>(new Set())
+  const [showArchived, setShowArchived] = useState(false)
   const [loadingTasks, setLoadingTasks] = useState(true)
+  const archiveStorageKey = useMemo(
+    () => (user?.id ? `lab-messenger:archived-tasks:${user.id}` : null),
+    [user?.id]
+  )
 
   const toggleExpanded = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -112,6 +118,28 @@ export default function TasksPage() {
       router.push('/login')
     }
   }, [isAuthenticated, isLoading, router])
+
+  useEffect(() => {
+    if (!archiveStorageKey) return
+    try {
+      const raw = localStorage.getItem(archiveStorageKey)
+      if (!raw) {
+        setArchivedTaskKeys(new Set())
+        return
+      }
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setArchivedTaskKeys(new Set(parsed.filter((value) => typeof value === 'string')))
+      }
+    } catch {
+      setArchivedTaskKeys(new Set())
+    }
+  }, [archiveStorageKey])
+
+  useEffect(() => {
+    if (!archiveStorageKey) return
+    localStorage.setItem(archiveStorageKey, JSON.stringify(Array.from(archivedTaskKeys)))
+  }, [archivedTaskKeys, archiveStorageKey])
 
   useEffect(() => {
     if (!user?.id) return
@@ -215,6 +243,25 @@ export default function TasksPage() {
     })
   }, [supabase, user?.id])
 
+  const visibleTasks = useMemo(() => {
+    if (showArchived) return tasks
+    return tasks.filter((task) => !archivedTaskKeys.has(task.key))
+  }, [tasks, archivedTaskKeys, showArchived])
+
+  const archivedCount = useMemo(
+    () => tasks.filter((task) => archivedTaskKeys.has(task.key)).length,
+    [tasks, archivedTaskKeys]
+  )
+
+  const toggleArchiveTask = useCallback((taskKey: string) => {
+    setArchivedTaskKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(taskKey)) next.delete(taskKey)
+      else next.add(taskKey)
+      return next
+    })
+  }, [])
+
   if (isLoading) {
     return (
       <main className="flex items-center justify-center h-dvh bg-background">
@@ -239,20 +286,32 @@ export default function TasksPage() {
           <h1 className="text-xl font-semibold text-white">Tasks</h1>
           <p className="text-xs text-zinc-400">Propostas e execuções dos agentes</p>
         </div>
+        {archivedCount > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setShowArchived((prev) => !prev)}
+            className="h-9 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-800"
+          >
+            {showArchived ? <ArchiveRestore className="h-4 w-4 mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
+            {showArchived ? 'Ocultar arquivadas' : `Mostrar arquivadas (${archivedCount})`}
+          </Button>
+        )}
       </header>
 
       <section className="safe-bottom flex-1 overflow-y-auto px-3 py-3">
         {loadingTasks ? (
           <div className="text-muted-foreground text-sm">Carregando tarefas...</div>
-        ) : tasks.length === 0 ? (
+        ) : visibleTasks.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            Nenhuma tarefa encontrada.
+            {tasks.length === 0 ? 'Nenhuma tarefa encontrada.' : 'Nenhuma tarefa visível com o filtro atual.'}
           </div>
         ) : (
           <div className="space-y-2">
-            {tasks.map((task) => {
+            {visibleTasks.map((task) => {
               const isOpen = expanded.has(task.key)
               const status = STATUS_META[task.status]
+              const isArchived = archivedTaskKeys.has(task.key)
               return (
                 <article
                   key={task.key}
@@ -282,6 +341,28 @@ export default function TasksPage() {
 
                   {isOpen && (
                     <div className="px-3 pb-3 pt-2 border-t border-zinc-700 bg-zinc-800">
+                      {task.status === 'completed' && (
+                        <div className="mb-3 flex justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => toggleArchiveTask(task.key)}
+                            className="h-8 rounded-lg border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-700 hover:text-white"
+                          >
+                            {isArchived ? (
+                              <>
+                                <ArchiveRestore className="h-4 w-4 mr-2" />
+                                Remover do arquivo
+                              </>
+                            ) : (
+                              <>
+                                <Archive className="h-4 w-4 mr-2" />
+                                Arquivar concluída
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
                       {task.description && (
                         <p className="text-sm text-zinc-100 mb-2">{task.description}</p>
                       )}

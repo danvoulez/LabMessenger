@@ -130,73 +130,75 @@ export function MessageInput({
   const busy = isUploading || isSendingText
 
   return (
-    <div className="safe-bottom safe-x sticky bottom-0 bg-background border-t border-border px-3 py-2">
-      <div className="h-[2px] w-full overflow-hidden rounded-full bg-muted/70 mb-2">
-        <div
-          className={cn(
-            'h-full bg-primary transition-[width] duration-150',
-            busy && visualProgress < 5 && 'animate-progress'
-          )}
-          style={{ width: `${visualProgress}%` }}
-          aria-hidden="true"
-        />
-      </div>
-      <div className="flex items-end gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={handleFileSelect}
-          disabled={disabled || busy}
-          accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.csv,.zip"
-        />
+    <div className="safe-bottom safe-x sticky bottom-0 bg-background border-t border-border px-4 py-3 sm:px-5">
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="h-[2px] w-full overflow-hidden rounded-full bg-muted/70 mb-2">
+          <div
+            className={cn(
+              'h-full bg-primary transition-[width] duration-150',
+              busy && visualProgress < 5 && 'animate-progress'
+            )}
+            style={{ width: `${visualProgress}%` }}
+            aria-hidden="true"
+          />
+        </div>
+        <div className="flex items-end gap-2 px-1">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileSelect}
+            disabled={disabled || busy}
+            accept="image/*,video/*,audio/*,.pdf,.txt,.md,.json,.csv,.zip"
+          />
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-          aria-label="Anexar arquivo"
-          onClick={handleOpenFilePicker}
-          disabled={!onSendAttachment || disabled || busy}
-        >
-          <Paperclip className="h-5 w-5" />
-        </Button>
-        
-        <div className="flex-1 flex items-end gap-2 bg-input rounded-3xl px-4 py-2">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground -ml-2"
-            aria-label="Emoji"
+            className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+            aria-label="Anexar arquivo"
+            onClick={handleOpenFilePicker}
+            disabled={!onSendAttachment || disabled || busy}
           >
-            <Smile className="h-5 w-5" />
+            <Paperclip className="h-5 w-5" />
           </Button>
           
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onInput={onUserStartTyping}
-            onKeyDown={handleKeyDown}
-            placeholder={isUploading ? 'Enviando arquivo...' : isSendingText ? 'Enviando mensagem...' : placeholder}
-            disabled={disabled || isUploading}
-            rows={1}
-            className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-[16px] leading-relaxed max-h-[120px] py-1"
-          />
+          <div className="flex-1 flex items-end gap-2 bg-input rounded-3xl px-4 py-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground -ml-2"
+              aria-label="Emoji"
+            >
+              <Smile className="h-5 w-5" />
+            </Button>
+            
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              onInput={onUserStartTyping}
+              onKeyDown={handleKeyDown}
+              placeholder={isUploading ? 'Enviando arquivo...' : isSendingText ? 'Enviando mensagem...' : placeholder}
+              disabled={disabled || isUploading}
+              rows={1}
+              className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-[16px] leading-relaxed max-h-[120px] py-1"
+            />
+          </div>
+          
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={disabled || !hasContent || busy}
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full"
+            aria-label="Enviar mensagem"
+          >
+            {isSendingText ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+          </Button>
         </div>
-        
-        <Button
-          type="button"
-          onClick={handleSubmit}
-          disabled={disabled || !hasContent || busy}
-          size="icon"
-          className="h-10 w-10 shrink-0 rounded-full"
-          aria-label="Enviar mensagem"
-        >
-          {isSendingText ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-        </Button>
       </div>
       {uploadError && (
         <p className="mt-2 text-xs text-destructive">{uploadError}</p>

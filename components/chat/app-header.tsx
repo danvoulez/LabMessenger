@@ -92,12 +92,12 @@ export function AppHeader({
 
   return (
     <header className={cn(
-      'safe-top safe-x sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b',
+      'safe-top safe-x sticky top-0 z-10 flex items-center justify-between px-5 py-3 border-b',
       isDark
         ? 'bg-zinc-900 border-white/10'
         : 'bg-card border-border'
     )}>
-      <div className="min-w-0">
+      <div className="min-w-0 pl-1">
         <h1 className={cn('text-xl font-semibold truncate', isDark ? 'text-white' : 'text-foreground')}>{title}</h1>
         <div className="mt-1">
           <ConnectionBadge status={connectionStatus} theme={theme} />
